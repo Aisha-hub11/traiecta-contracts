@@ -1,0 +1,45 @@
+# Rust / Soroban
+target/
+**/target/
+*.wasm
+!deployments/**/*.wasm.sha256
+
+# Foundry
+evm/out/
+evm/cache/
+evm/broadcast/
+evm/lib/
+evm/.gas-snapshot.tmp
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+.pnpm-store/
+
+# Secrets. Nothing in here ever reaches a commit.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!**/*.key.example
+secrets/
+.secrets
+keystore/
+*.keystore
+.stellar/
+.soroban/
+deployer.json
+signer.json
+*.mnemonic
+*.seed
+
+# Local tooling noise
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
+coverage/
+lcov.info
