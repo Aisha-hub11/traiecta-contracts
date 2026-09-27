@@ -8,15 +8,22 @@
 
 pub mod address;
 pub mod amount;
+pub mod cctp;
+pub mod codec;
 pub mod error;
 pub mod flow;
+pub mod inbound;
 pub mod route;
+pub mod strkey;
 
 pub use address::{AddressKind, StellarDestination};
-pub use amount::Conversion;
+pub use amount::{Conversion, FeeSplit};
+pub use cctp::{BurnMessage, CctpMessage, HyperionHook};
 pub use error::HyperionError;
 pub use flow::FlowWindow;
+pub use inbound::{Origin, Recipient, Router, RouterClient};
 pub use route::RouteKind;
+pub use strkey::StrkeyDestination;
 
 /// Ledgers used as the default flow-limit window. Stellar closes a ledger roughly every
 /// five seconds, so 720 ledgers is about an hour.

@@ -3,6 +3,9 @@ target/
 **/target/
 *.wasm
 !deployments/**/*.wasm.sha256
+# Regenerated on every `cargo test` run. Eight megabytes of ledger JSON that says nothing a
+# reviewer needs and conflicts on every branch.
+test_snapshots/
 
 # Foundry
 evm/out/
@@ -43,3 +46,6 @@ signer.json
 *.log
 coverage/
 lcov.info
+
+# Local planning notes, never committed
+.planning/

@@ -997,6 +997,7 @@ name = "hyperion-adapter-cctp"
 version = "0.1.0"
 dependencies = [
  "hyperion-core",
+ "hyperion-router",
  "soroban-sdk",
 ]
 

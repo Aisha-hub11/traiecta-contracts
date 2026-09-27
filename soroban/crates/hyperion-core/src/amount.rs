@@ -30,10 +30,7 @@ pub fn pow10(exp: u32) -> Option<i128> {
     let mut acc: i128 = 1;
     let mut i = 0u32;
     while i < exp {
-        acc = match acc.checked_mul(10) {
-            Some(v) => v,
-            None => return None,
-        };
+        acc = acc.checked_mul(10)?;
         i += 1;
     }
     Some(acc)
@@ -105,11 +102,24 @@ pub fn floor_to_representable(amount: i128, from: u32, to: u32) -> Result<i128, 
     Ok(amount - (amount % factor))
 }
 
+/// How a gross amount divides between the recipient and the protocol.
+///
+/// This is a named struct rather than a pair of i128s on purpose. Two same-typed numbers in a
+/// tuple are one careless destructuring away from charging a 99.9 percent fee, and the whole
+/// reason this module exists is to keep that class of mistake out of the contracts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FeeSplit {
+    /// What crosses.
+    pub net: i128,
+    /// What the protocol keeps.
+    pub fee: i128,
+}
+
 /// Split `amount` into what the recipient gets and what the protocol keeps.
 ///
 /// The fee is charged on the outbound leg only and denominated in the asset being bridged, so
 /// the number a user sees does not drift with an unrelated gas market.
-pub fn apply_fee(amount: i128, fee_bps: u32) -> Result<(i128, i128), HyperionError> {
+pub fn apply_fee(amount: i128, fee_bps: u32) -> Result<FeeSplit, HyperionError> {
     if amount <= 0 {
         return Err(HyperionError::InvalidAmount);
     }
@@ -124,7 +134,7 @@ pub fn apply_fee(amount: i128, fee_bps: u32) -> Result<(i128, i128), HyperionErr
     if net <= 0 {
         return Err(HyperionError::InvalidAmount);
     }
-    Ok((net, fee))
+    Ok(FeeSplit { net, fee })
 }
 
 #[cfg(test)]
@@ -139,7 +149,10 @@ mod tests {
         assert_eq!(pow10(1), Some(10));
         assert_eq!(pow10(6), Some(1_000_000));
         assert_eq!(pow10(7), Some(10_000_000));
-        assert_eq!(pow10(38), Some(100_000_000_000_000_000_000_000_000_000_000_000_000));
+        assert_eq!(
+            pow10(38),
+            Some(100_000_000_000_000_000_000_000_000_000_000_000_000)
+        );
         assert_eq!(pow10(39), None);
     }
 
@@ -242,7 +255,7 @@ mod tests {
     #[test]
     fn fee_math_matches_the_documented_opening_range() {
         // 1000 USDC at 6 decimals, 10 bps.
-        let (net, fee) = apply_fee(1_000_000_000, 10).unwrap();
+        let FeeSplit { net, fee } = apply_fee(1_000_000_000, 10).unwrap();
         assert_eq!(fee, 1_000_000);
         assert_eq!(net, 999_000_000);
         assert_eq!(net + fee, 1_000_000_000);
@@ -250,7 +263,7 @@ mod tests {
 
     #[test]
     fn a_zero_fee_is_allowed_and_takes_nothing() {
-        let (net, fee) = apply_fee(500, 0).unwrap();
+        let FeeSplit { net, fee } = apply_fee(500, 0).unwrap();
         assert_eq!(fee, 0);
         assert_eq!(net, 500);
     }
@@ -265,7 +278,7 @@ mod tests {
     fn a_dust_sized_transfer_that_would_round_the_fee_to_zero_still_balances() {
         // 1 base unit at 10 bps rounds the fee down to nothing. The user keeps their unit
         // rather than the call reverting, and the books still add up.
-        let (net, fee) = apply_fee(1, 10).unwrap();
+        let FeeSplit { net, fee } = apply_fee(1, 10).unwrap();
         assert_eq!(fee, 0);
         assert_eq!(net, 1);
     }
@@ -312,7 +325,7 @@ mod tests {
             amount in 1i128..1_000_000_000_000_000_000i128,
             bps in 0u32..=MAX_FEE_BPS,
         ) {
-            let (net, fee) = apply_fee(amount, bps).unwrap();
+            let FeeSplit { net, fee } = apply_fee(amount, bps).unwrap();
             prop_assert_eq!(net + fee, amount);
             prop_assert!(fee >= 0);
             prop_assert!(net > 0);

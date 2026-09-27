@@ -211,7 +211,10 @@ mod tests {
         // Halfway through the next window, half the old total still counts.
         let halfway = W + W / 2;
         let used = effective_consumed(&w, halfway, W).unwrap();
-        assert!((495..=505).contains(&used), "expected about 500, got {used}");
+        assert!(
+            (495..=505).contains(&used),
+            "expected about 500, got {used}"
+        );
 
         // At the very end of the next window the old total has essentially gone.
         let nearly_done = W + W - 1;
@@ -266,7 +269,10 @@ mod tests {
     fn zero_and_negative_amounts_are_refused() {
         let w = FlowWindow::empty();
         assert_eq!(consume(&w, 100, 0, 0, W), Err(HyperionError::InvalidAmount));
-        assert_eq!(consume(&w, 100, -5, 0, W), Err(HyperionError::InvalidAmount));
+        assert_eq!(
+            consume(&w, 100, -5, 0, W),
+            Err(HyperionError::InvalidAmount)
+        );
     }
 
     #[test]

@@ -57,4 +57,31 @@ pub enum HyperionError {
     InvalidLimit = 29,
     InvalidWindow = 30,
     TokenNotRegistered = 31,
+
+    // Rail adapters. Everything from here down is raised by an adapter rather than the router,
+    // and the numbering carries straight on so a caller only ever has one table to look at.
+    /// The bytes handed over do not parse as the message they claim to be.
+    MalformedMessage = 32,
+    /// A hook payload written by a version of Hyperion this contract does not know how to read.
+    UnsupportedHookVersion = 33,
+    /// The adapter has not been pointed at the rail contract it needs yet.
+    RailNotConfigured = 34,
+    /// A message addressed to some other chain's CCTP domain.
+    WrongDomain = 35,
+    /// The mint recipient in the message is not this adapter, so the funds are not ours to move.
+    NotMintRecipient = 36,
+    /// The message is addressed to something other than the token messenger we were told about.
+    UnexpectedRailContract = 37,
+    /// The rail's verifier accepted the message but nothing actually arrived.
+    NothingMinted = 38,
+    /// No local asset has been mapped to this source domain and remote token.
+    TokenNotMapped = 39,
+    /// A one-time setting that has already been written.
+    AlreadyConfigured = 40,
+    /// A pooled route asked for more than the pool holds.
+    InsufficientLiquidity = 41,
+    /// The message version on the wire is not the one this adapter speaks.
+    UnsupportedMessageVersion = 42,
+    /// The caller is not the rail whose delivery this claims to be.
+    NotTheRail = 43,
 }
