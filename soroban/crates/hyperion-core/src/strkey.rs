@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Bytes, Env, String};
+use soroban_sdk::{contracttype, Address, Bytes, Env, MuxedAddress, String};
 
 use crate::address::AddressKind;
 use crate::error::HyperionError;
@@ -123,13 +123,41 @@ impl StrkeyDestination {
         dest.validate()?;
         Ok(dest)
     }
+
+    /// The address funds should actually be sent to.
+    ///
+    /// A muxed destination collapses to its underlying account, exactly as it does in
+    /// [`crate::address::StellarDestination::to_address`]. The muxed id is a routing hint for
+    /// whoever operates that account rather than a balance of its own, so the transfer lands on
+    /// the base account either way and the id travels in the event trail.
+    ///
+    /// The host parses the string here, which means it checks the CRC. That is the whole reason
+    /// this wire format carries a strkey rather than a raw key.
+    pub fn to_address(&self, env: &Env) -> Result<Address, HyperionError> {
+        self.validate()?;
+        let _ = env;
+        Ok(match self.kind {
+            AddressKind::MuxedAccount => MuxedAddress::from_string(&self.value).address(),
+            _ => Address::from_string(&self.value),
+        })
+    }
+
+    /// The muxed form, for the places that can carry a subaccount id through.
+    pub fn to_muxed(&self, env: &Env) -> Result<MuxedAddress, HyperionError> {
+        self.validate()?;
+        let _ = env;
+        Ok(match self.kind {
+            AddressKind::MuxedAccount => MuxedAddress::from_string(&self.value),
+            _ => Address::from_string(&self.value).into(),
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use soroban_sdk::testutils::Address as _;
-    use soroban_sdk::{Address, Env};
+    use soroban_sdk::Env;
 
     // Real strkeys, checksums and all. Generated with the Stellar CLI so the shapes here are
     // the shapes the network actually produces.
@@ -317,5 +345,50 @@ mod tests {
             StrkeyDestination::decode(&env, &wire),
             Err(HyperionError::InvalidDestination)
         );
+    }
+    #[test]
+    fn every_kind_resolves_to_an_address_the_host_agrees_with() {
+        let env = Env::default();
+        for (kind, value) in [
+            (AddressKind::Account, G_ADDR),
+            (AddressKind::Contract, C_ADDR),
+        ] {
+            let dest = StrkeyDestination::new(kind, String::from_str(&env, value));
+            assert_eq!(dest.to_address(&env).unwrap().to_string(), dest.value);
+        }
+    }
+
+    #[test]
+    fn a_muxed_destination_collapses_to_the_account_underneath_it() {
+        let env = Env::default();
+        let muxed =
+            StrkeyDestination::new(AddressKind::MuxedAccount, String::from_str(&env, M_ADDR));
+        let plain = StrkeyDestination::new(AddressKind::Account, String::from_str(&env, G_ADDR));
+
+        // The M form and the G form above are the same key, so the money goes to the same place.
+        // Two virtual subaccounts of one exchange account are not two balances.
+        assert_eq!(
+            muxed.to_address(&env).unwrap(),
+            plain.to_address(&env).unwrap()
+        );
+        // The id survives the muxed form and is simply absent from the plain one.
+        assert_eq!(
+            muxed.to_muxed(&env).unwrap().id(),
+            Some(9_007_199_254_740_993)
+        );
+        assert_eq!(plain.to_muxed(&env).unwrap().id(), None);
+    }
+
+    #[test]
+    fn a_destination_that_fails_validation_never_produces_an_address() {
+        let env = Env::default();
+        // Resolving before validating would hand the host a string it might well accept, and the
+        // disagreement about what kind of thing it is would go unnoticed.
+        let lying = StrkeyDestination::new(AddressKind::Contract, String::from_str(&env, G_ADDR));
+        assert_eq!(
+            lying.to_address(&env),
+            Err(HyperionError::InvalidDestination)
+        );
+        assert_eq!(lying.to_muxed(&env), Err(HyperionError::InvalidDestination));
     }
 }

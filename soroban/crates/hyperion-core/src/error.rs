@@ -84,4 +84,10 @@ pub enum HyperionError {
     UnsupportedMessageVersion = 42,
     /// The caller is not the rail whose delivery this claims to be.
     NotTheRail = 43,
+    /// This adapter instance was wired for a route it cannot serve.
+    ///
+    /// One WASM can back more than one route, but an instance of it is set up for exactly
+    /// one, and being asked to be a different one is a deployment mistake rather than a
+    /// runtime condition.
+    UnsupportedRoute = 44,
 }

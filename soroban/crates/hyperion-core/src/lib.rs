@@ -8,6 +8,7 @@
 
 pub mod address;
 pub mod amount;
+pub mod axelar;
 pub mod cctp;
 pub mod codec;
 pub mod error;
@@ -18,6 +19,7 @@ pub mod strkey;
 
 pub use address::{AddressKind, StellarDestination};
 pub use amount::{Conversion, FeeSplit};
+pub use axelar::{InboundNote, OutboundNote};
 pub use cctp::{BurnMessage, CctpMessage, HyperionHook};
 pub use error::HyperionError;
 pub use flow::FlowWindow;
