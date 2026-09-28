@@ -168,7 +168,7 @@ impl MockIts {
         if let Some(ref gas) = gas_token {
             token::Client::new(&env, &gas.address).transfer(
                 &caller,
-                &env.current_contract_address(),
+                env.current_contract_address(),
                 &gas.amount,
             );
         }

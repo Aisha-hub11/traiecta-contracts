@@ -16,3 +16,7 @@ hyperion-core = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+# The tests run against the real router rather than a stand-in for it, because the handover
+# between the two is the part most worth checking and a mock router would agree with whatever
+# this adapter did. Only a dev dependency, so none of the router's code reaches the deployed WASM.
+hyperion-router = { path = "../hyperion-router" }

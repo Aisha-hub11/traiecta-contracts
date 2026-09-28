@@ -90,4 +90,12 @@ pub enum HyperionError {
     /// one, and being asked to be a different one is a deployment mistake rather than a
     /// runtime condition.
     UnsupportedRoute = 44,
+    /// A rail that charges for relaying was asked to relay and the float could not cover it.
+    ///
+    /// Distinct from a fee problem. The transfer is fine and the configuration is fine; the
+    /// contract simply does not hold enough of the gas asset to buy the next hop right now,
+    /// and anybody can fix that by topping it up.
+    GasFloatTooLow = 45,
+    /// Somebody tried to move an asset the contract holds on purpose.
+    ProtectedAsset = 46,
 }
