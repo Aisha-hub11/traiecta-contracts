@@ -11,7 +11,9 @@ test_snapshots/
 evm/out/
 evm/cache/
 evm/broadcast/
-evm/lib/
+# `evm/lib` is deliberately NOT ignored. forge-std and OpenZeppelin live there as pinned git
+# submodules, so a contributor who clones gets the exact revision the suite was run against
+# rather than whatever a registry resolves to on the day.
 evm/.gas-snapshot.tmp
 
 # Node

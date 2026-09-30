@@ -1,0 +1,21 @@
+{
+  "extends": "solhint:recommended",
+  "rules": {
+    "compiler-version": ["error", "^0.8.28"],
+    "max-line-length": ["error", 110],
+    "gas-custom-errors": "error",
+    "interface-starts-with-i": "error",
+    "no-global-import": "error",
+    "named-parameters-mapping": "off",
+    "no-empty-blocks": "off",
+    "ordering": "off",
+    "one-contract-per-file": "off",
+
+    "use-natspec": ["error", {"author": {"enabled": false}}],
+
+    "import-path-check": "off",
+    "gas-indexed-events": "off",
+    "gas-strict-inequalities": "off",
+    "gas-struct-packing": "off"
+  }
+}

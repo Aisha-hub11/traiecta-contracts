@@ -1,0 +1,84 @@
+# Hyperion, EVM side.
+#
+# One profile for day to day work and one for CI. The only differences are how hard the fuzzer
+# is allowed to try and whether a slow invariant run is worth the wall clock, because a config
+# that behaves differently on a contributor's machine than it does on the branch protection
+# check is a config nobody trusts.
+
+[profile.default]
+src = "src"
+out = "out"
+test = "test"
+script = "script"
+libs = ["lib"]
+solc = "0.8.28"
+evm_version = "cancun"
+
+# The IR pipeline rather than the legacy one. Two reasons, both practical. The codec heavy
+# functions here legitimately want more than sixteen live values, and on the legacy pipeline that
+# is a compile error you fix by shuffling locals around until it goes away, which is a terrible
+# thing to have to do to a function that decodes addresses for a bridge. And the optimizer sees
+# across function boundaries this way, which is where the savings in a contract built out of small
+# libraries actually are. It costs compile time, and that is a fair price.
+via_ir = true
+
+optimizer = true
+# Every function here runs far more often than it is deployed, and the router is nowhere near
+# the size limit, so the runs number is set for calldata and execution cost rather than for
+# bytecode size.
+optimizer_runs = 20000
+
+# Warnings are the only way the compiler tells you about a shadowed name or an unreachable
+# branch, and a warning nobody has to clear is a warning everybody scrolls past.
+deny = "warnings"
+
+gas_reports = ["HyperionRouter", "CctpAdapter", "AxelarItsAdapter"]
+
+# The deploy scripts write an address book. Nothing else on disk is reachable.
+fs_permissions = [{access = "read-write", path = "./deployments"}]
+
+[lint]
+# Hand written assembly instead of `keccak256(abi.encode(...))` saves roughly a hundred gas on a
+# replay key. It also means the one line standing between a message and a second delivery is a
+# line nobody can read at a glance. That is the wrong thing to buy a hundred gas with.
+exclude_lints = ["asm-keccak256"]
+
+[profile.default.fuzz]
+runs = 512
+max_test_rejects = 200000
+
+[profile.default.invariant]
+runs = 64
+depth = 64
+fail_on_revert = false
+
+# CI has time a contributor waiting on a save does not, so it spends it on the amount and address
+# codecs, which are the parts where a rare input is the whole risk.
+[profile.ci.fuzz]
+runs = 20000
+max_test_rejects = 500000
+
+[profile.ci.invariant]
+runs = 256
+depth = 128
+
+[fmt]
+line_length = 110
+tab_width = 4
+bracket_spacing = false
+int_types = "long"
+multiline_func_header = "attributes_first"
+quote_style = "double"
+number_underscore = "thousands"
+override_spacing = false
+wrap_comments = false
+sort_imports = true
+
+[rpc_endpoints]
+sepolia = "${SEPOLIA_RPC_URL}"
+base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+arc_testnet = "${ARC_TESTNET_RPC_URL}"
+
+[etherscan]
+sepolia = { key = "${ETHERSCAN_API_KEY}" }
+base_sepolia = { key = "${BASESCAN_API_KEY}", chain = 84532 }
