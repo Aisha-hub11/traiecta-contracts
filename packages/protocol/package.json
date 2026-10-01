@@ -1,0 +1,56 @@
+{
+  "name": "@hyperion/protocol",
+  "version": "0.1.0",
+  "description": "The facts both halves of Hyperion have to agree on: chain registry, rail metadata, wire codecs, amount maths and the contract ABIs",
+  "license": "MIT",
+  "author": "dotmantissa",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StellarHyperion/stellarhyperion-contracts.git",
+    "directory": "packages/protocol"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./abi": {
+      "types": "./dist/abi/index.d.ts",
+      "import": "./dist/abi/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "gen": "node scripts/gen-artifacts.mjs",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "fmt": "prettier --write \"**/*.{ts,mts,mjs,json,md}\"",
+    "fmt:check": "prettier --check \"**/*.{ts,mts,mjs,json,md}\"",
+    "check": "npm run fmt:check && npm run lint && npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.0",
+    "viem": "^2.57.2",
+    "vitest": "^4.1.11"
+  }
+}

@@ -1,0 +1,9 @@
+dist
+node_modules
+coverage
+package-lock.json
+
+# Generated from the Foundry build by scripts/gen-artifacts.mjs. Two tools formatting one file
+# means regenerating it produces a different file than the one committed, and `parity.test.ts`
+# compares exactly those bytes. The generator owns the formatting here.
+src/abi
