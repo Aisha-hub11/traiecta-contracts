@@ -115,16 +115,27 @@ describe("pairing the two ends of a hop", () => {
 });
 
 describe("the rail contracts", () => {
-  it("has an entry for every EVM chain and none for Stellar", () => {
-    // Stellar's CCTP addresses are not published as a fixed list, so they come from the
-    // deployment record rather than from here.
+  it("has an entry for every chain Hyperion routes", () => {
     for (const key of CHAIN_KEYS) {
+      expect(railContracts(key)).not.toBeNull();
+    }
+  });
+
+  it("gives Stellar an Axelar entry and no CCTP entry", () => {
+    // Axelar publishes its Stellar contracts; Circle does not publish a fixed list for CCTP on
+    // Stellar, so those come from the deployment record and nowhere else.
+    for (const key of ["stellar", "stellar-testnet"] as const) {
       const entry = railContracts(key);
-      if (isEvmChain(chain(key))) {
-        expect(entry).not.toBeNull();
-      } else {
-        expect(entry).toBeNull();
-      }
+      expect(entry?.cctp).toBeNull();
+      expect(entry?.axelar).not.toBeNull();
+      expect(entry?.confirmed).toBe(true);
+    }
+  });
+
+  it("gives every EVM chain a CCTP entry", () => {
+    for (const key of CHAIN_KEYS) {
+      if (!isEvmChain(chain(key))) continue;
+      expect(railContracts(key)?.cctp).not.toBeNull();
     }
   });
 
@@ -147,16 +158,37 @@ describe("the rail contracts", () => {
   });
 
   it("has well formed addresses throughout", () => {
+    // Null is a real value in several of these: Soroban has no deterministic factory and needs no
+    // multicall, and Circle has not deployed every optional CCTP contract everywhere. What this
+    // checks is that anything present is the right shape, not that everything is present.
     const hex = /^0x[0-9a-fA-F]{40}$/;
+    const evmAddresses = (bag: object): string[] =>
+      Object.values(bag).filter((value): value is string => typeof value === "string");
+
     for (const key of CHAIN_KEYS) {
       const entry = railContracts(key);
       if (entry === null) continue;
+      const soroban = !isEvmChain(chain(key));
+
       if (entry.cctp !== null) {
-        for (const address of Object.values(entry.cctp)) expect(address).toMatch(hex);
+        for (const address of evmAddresses(entry.cctp)) expect(address).toMatch(hex);
       }
-      for (const address of Object.values(entry.common)) expect(address).toMatch(hex);
       if (entry.gateway !== null) {
-        for (const address of Object.values(entry.gateway)) expect(address).toMatch(hex);
+        for (const address of evmAddresses(entry.gateway)) expect(address).toMatch(hex);
+      }
+      for (const address of evmAddresses(entry.common)) expect(address).toMatch(hex);
+
+      if (entry.axelar !== null) {
+        const { chainName, interchainTokenService, gasService, gateway } = entry.axelar;
+        expect(chainName.length).toBeGreaterThan(0);
+        for (const address of [interchainTokenService, gasService, gateway]) {
+          if (address === null) continue;
+          if (soroban) {
+            expect(isStellarAddress(address)).toBe(true);
+          } else {
+            expect(address).toMatch(hex);
+          }
+        }
       }
     }
   });
@@ -173,6 +205,46 @@ describe("the rail contracts", () => {
   it("only gives Arc a Gateway, because that is the only chain that has one here", () => {
     expect(railContracts("arc")?.gateway).not.toBeNull();
     expect(railContracts("base")?.gateway).toBeNull();
+  });
+
+  it("agrees with the chain registry about what Axelar calls each chain", () => {
+    // Two copies of the same string, and the only reason that is tolerable is that this test
+    // fails when they drift. Both came out of Axelar's own config in one reading.
+    for (const key of CHAIN_KEYS) {
+      const axelar = railContracts(key)?.axelar ?? null;
+      expect(axelar?.chainName ?? null).toBe(chain(key).axelarName);
+    }
+  });
+
+  it("records the capitalisation Axelar actually uses on Ethereum mainnet", () => {
+    // Guessing "ethereum" here would produce a peer check that never matches, and the failure
+    // would show up as a delivery that silently never arrives.
+    expect(railContracts("ethereum")?.axelar?.chainName).toBe("Ethereum");
+    expect(railContracts("sepolia")?.axelar?.chainName).toBe("ethereum-sepolia");
+  });
+
+  it("uses one interchain token service address across the EVM chains that share one", () => {
+    const shared = railContracts("ethereum")?.axelar?.interchainTokenService;
+    expect(shared).toBeDefined();
+    for (const key of ["base", "sepolia", "base-sepolia"] as const) {
+      expect(railContracts(key)?.axelar?.interchainTokenService).toBe(shared);
+    }
+    // Arc's testnet is the exception, which is the whole reason this is not a constant.
+    expect(railContracts("arc-testnet")?.axelar?.interchainTokenService).not.toBe(shared);
+  });
+
+  it("leaves Arc mainnet without an Axelar entry rather than inventing one", () => {
+    expect(railContracts("arc")?.axelar).toBeNull();
+    expect(chain("arc").axelarName).toBeNull();
+  });
+
+  it("has Soroban contract ids, not hex addresses, on the Stellar entries", () => {
+    for (const key of ["stellar", "stellar-testnet"] as const) {
+      const axelar = railContracts(key)?.axelar;
+      expect(isStellarAddress(axelar?.interchainTokenService ?? "")).toBe(true);
+      expect(axelar?.interchainTokenService.startsWith("C")).toBe(true);
+      expect(isStellarAddress(axelar?.gasService ?? "")).toBe(true);
+    }
   });
 
   it("knows the three addresses that are the same on every EVM chain", () => {

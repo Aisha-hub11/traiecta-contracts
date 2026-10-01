@@ -47,11 +47,15 @@ interface ChainBase {
    */
   readonly cctpDomain: number | null;
   /**
-   * Axelar's own name for this chain, or null where it has to come from the deployment record.
+   * Axelar's own name for this chain, or null where Axelar does not list it.
    *
-   * Left null rather than guessed on purpose. The adapter takes this string explicitly in
-   * `setPeer`, so the deployment is authoritative and a wrong default here would be a wrong default
-   * that looks official.
+   * Read out of `axelar-chains-config/info` in axelarnetwork/axelar-contract-deployments, which is
+   * where Axelar publishes these, rather than guessed. Guessing does not work here: the mainnet id
+   * for Ethereum is "Ethereum" with a capital letter while the testnet one is "ethereum-sepolia"
+   * without, and Stellar's testnet id carries a version suffix that moves when Axelar redeploys.
+   *
+   * Still only a default. The adapters take this string explicitly in `setPeer` and `link_chain`,
+   * so the deployment record is what a live contract is actually comparing against.
    */
   readonly axelarName: string | null;
   /** Where to send somebody who wants to see a transaction with their own eyes. */
@@ -117,7 +121,7 @@ const STELLAR_MAINNET: StellarChain = {
   shortName: "Stellar",
   // Circle publishes Stellar as CCTP V2 domain 27.
   cctpDomain: 27,
-  axelarName: null,
+  axelarName: "stellar",
   networkPassphrase: "Public Global Stellar Network ; September 2015",
   defaultRpcUrl: "https://mainnet.sorobanrpc.com",
   defaultHorizonUrl: "https://horizon.stellar.org",
@@ -140,7 +144,7 @@ const STELLAR_TESTNET: StellarChain = {
   name: "Stellar Testnet",
   shortName: "Stellar test",
   cctpDomain: 27,
-  axelarName: null,
+  axelarName: "stellar-2026-q1-2",
   networkPassphrase: "Test SDF Network ; September 2015",
   defaultRpcUrl: "https://soroban-testnet.stellar.org",
   defaultHorizonUrl: "https://horizon-testnet.stellar.org",
@@ -164,7 +168,7 @@ const ETHEREUM: EvmChain = {
   shortName: "Ethereum",
   chainId: 1,
   cctpDomain: 0,
-  axelarName: "ethereum",
+  axelarName: "Ethereum",
   defaultRpcUrl: "https://eth.llamarpc.com",
   defaultWsUrl: null,
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
@@ -190,7 +194,7 @@ const SEPOLIA: EvmChain = {
   shortName: "Sepolia",
   chainId: 11_155_111,
   cctpDomain: 0,
-  axelarName: null,
+  axelarName: "ethereum-sepolia",
   defaultRpcUrl: "https://ethereum-sepolia-rpc.publicnode.com",
   defaultWsUrl: null,
   nativeCurrency: { name: "Sepolia Ether", symbol: "ETH", decimals: 18 },
@@ -242,7 +246,7 @@ const BASE_SEPOLIA: EvmChain = {
   shortName: "Base test",
   chainId: 84_532,
   cctpDomain: 6,
-  axelarName: null,
+  axelarName: "base-sepolia",
   defaultRpcUrl: "https://sepolia.base.org",
   defaultWsUrl: null,
   nativeCurrency: { name: "Sepolia Ether", symbol: "ETH", decimals: 18 },
@@ -304,7 +308,7 @@ const ARC_TESTNET: EvmChain = {
   shortName: "Arc test",
   chainId: 5_042_002,
   cctpDomain: 26,
-  axelarName: null,
+  axelarName: "arc-8",
   defaultRpcUrl: "https://rpc.testnet.arc.io",
   defaultWsUrl: "wss://rpc.testnet.arc.io",
   nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
