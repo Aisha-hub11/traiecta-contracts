@@ -136,10 +136,12 @@ ones a misconfiguration gets wrong without reverting.
 
 No signing key is ever read from the environment or written to a record. The Stellar scripts take a
 named identity from `stellar keys`, held in the CLI's own config directory outside this repository.
-The EVM scripts take whatever Foundry was given on the command line. The only account that appears
-in any committed file is a public address, and the only private key in the whole tree is anvil's
-first well known account, in the local end to end driver, on a chain that is deleted when the
-script exits.
+The EVM scripts take whatever Foundry was given on the command line.
+
+There is no private key anywhere in this repository, not even a throwaway one. The local end to end
+driver signs through anvil's unlocked accounts and names only a public address, so the usual
+well known development key never had to appear. Grepping the tracked tree for sixty four hex
+characters returns wasm hashes and a tarball checksum and nothing else.
 
 ## Currently live
 
