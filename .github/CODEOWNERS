@@ -1,0 +1,106 @@
+# Who gets asked to review what.
+#
+# GitHub reads this file top to bottom and the LAST matching pattern wins, which is the opposite
+# of .gitignore and catches everybody once. So the catch all goes first and the paths that deserve
+# more care go after it. Reordering this file changes who gets requested.
+#
+# Right now every line names the same person, so none of this changes who reviews anything today.
+# It is written out anyway for two reasons. The paths below are the ones where a second reviewer
+# should be added first when there is one, and listing them means that addition is a one line
+# change rather than an argument about which files matter. And an explicit entry cannot be
+# silently captured by a broader rule somebody adds later.
+
+# Everything, unless something below is more specific.
+*                                   @dotmantissa
+
+# -----------------------------------------------------------------------------------------------
+# Contract sources. Code that gets deployed and then cannot be edited.
+# -----------------------------------------------------------------------------------------------
+
+# The Stellar side. hyperion-core is listed separately below because it is the shared one.
+/soroban/crates/                    @dotmantissa
+
+# The shared primitives: decimal conversion, strkey encoding, flow accounting, error codes. Every
+# other crate depends on this one, so a change here is a change to every rail at once.
+/soroban/crates/hyperion-core/      @dotmantissa
+
+# The EVM side.
+/evm/src/                           @dotmantissa
+
+# The router is where every routing decision actually lives. Nothing in this repository has a
+# wider blast radius.
+/evm/src/HyperionRouter.sol         @dotmantissa
+
+# The rail adapters. Each one is the boundary between code written here and a rail nobody here
+# controls, which makes them the files where a wrong assumption is most expensive.
+/evm/src/adapters/                  @dotmantissa
+
+# The shared libraries. Amount maths, flow windows, note layout, strkey encoding. These are the
+# Solidity halves of the pairs that packages/protocol/test/parity.test.ts checks against the Rust,
+# so a change here is almost never a change to one file.
+/evm/src/libraries/                 @dotmantissa
+
+# Error declarations and the types on the wire. The ORDER of the declarations in HyperionErrors.sol
+# is load bearing: the generated selector table and errors.ts both follow it, and reordering it
+# relabels every failure the contracts have ever emitted, each one plausibly.
+/evm/src/HyperionErrors.sol         @dotmantissa
+/evm/src/HyperionTypes.sol          @dotmantissa
+
+# -----------------------------------------------------------------------------------------------
+# Deployment. Code that runs once, with a key, against something real.
+# -----------------------------------------------------------------------------------------------
+
+# The two phase timelocked deployment, the verifier and the smoke test. A mistake in phase one is
+# a mistake you find out about an hour later, on a chain where the fix also takes an hour.
+/evm/script/                        @dotmantissa
+
+# The Stellar deploy scripts and the anvil rehearsal. lib.sh in particular decides how the signing
+# identity is resolved, and the rule it enforces, that a named identity is used and never a secret
+# read out of the environment, is the reason no key has ever reached a log here.
+/script/                            @dotmantissa
+
+# Deployment records. These are what phase two reads back and what the verifier compares the chain
+# against, so an edit here can make a correct chain look wrong or a wrong chain look correct.
+/deployments/                       @dotmantissa
+/evm/deployments/                   @dotmantissa
+
+# -----------------------------------------------------------------------------------------------
+# Generated files, build configuration, and the pins that make a build reproducible.
+# -----------------------------------------------------------------------------------------------
+
+# Generated from the Foundry build by packages/protocol/scripts/gen-artifacts.mjs. A hand edit
+# here is a failing parity test, and is meant to be.
+/packages/protocol/src/abi/         @dotmantissa
+
+# The compiler settings, the fuzzer budget, the lint exclusions and the formatter rules. Changing
+# optimizer_runs or via_ir changes the bytecode that ships.
+/evm/foundry.toml                   @dotmantissa
+
+# The Rust workspace, the release profile, and the toolchain pin. opt-level = "z", lto and
+# panic = "abort" are all there because the wasm has to fit in 64KB.
+/soroban/Cargo.toml                 @dotmantissa
+/soroban/rust-toolchain.toml        @dotmantissa
+
+# Lockfiles. What CI installs is what was tested, and that is only true while these are honest.
+/soroban/Cargo.lock                 @dotmantissa
+/evm/package-lock.json              @dotmantissa
+/packages/protocol/package-lock.json @dotmantissa
+
+# forge-std and OpenZeppelin are committed submodules, pinned to the revisions the suite was run
+# against. Moving either one moves the ground under every test.
+/.gitmodules                        @dotmantissa
+/evm/lib/                           @dotmantissa
+
+# The install flags. .npmrc carries legacy-peer-deps with a written reason, and removing it breaks
+# the install outright rather than degrading it.
+/packages/protocol/.npmrc           @dotmantissa
+
+# -----------------------------------------------------------------------------------------------
+# CI and policy. A workflow can read the repository and runs on a pull request, so a change here
+# is a change to the trust boundary of the build.
+# -----------------------------------------------------------------------------------------------
+
+/.github/                           @dotmantissa
+/.github/workflows/                 @dotmantissa
+/.github/CODEOWNERS                 @dotmantissa
+/.github/SECURITY.md                @dotmantissa

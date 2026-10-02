@@ -1,0 +1,139 @@
+name: deploy rehearsal
+
+# The whole EVM deployment, on a throwaway chain, every time.
+#
+# This is the most valuable check in the repository and it is worth being clear about why. The unit
+# and fuzz suites prove the contracts behave. They do not prove the deployment works, and the
+# things that break a deployment are not the things a compiler or a unit test sees: an action
+# queued with a field the router refuses, lanes set in the wrong order, a record whose keys do not
+# match what phase two reads back, a hook the far side cannot parse. Hyperion's deployment is two
+# phased with a timelock in the middle, so a mistake in phase one is a mistake you find out about
+# an hour later on a chain where the fix also takes an hour. script/anvil-e2e.sh finds all of it in
+# under a minute, for free, before anything is signed.
+#
+# It also checks the timelock actually refuses an early execution and that phase two is idempotent.
+# Both of those are properties nobody would notice the loss of until the day they mattered.
+#
+# There is no companion deploy workflow and that is deliberate. Every real deployment path needs a
+# signing key, and a workflow that holds one is a workflow that can move funds from a pull request.
+# Deployments are run by a person from a machine with the key, using the same scripts this job
+# rehearses. If that ever changes, the key custody story gets written down first and the workflow
+# second.
+#
+# Called by ci.yml, which holds the concurrency group.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The script greps forge script output for specific lines. Pinning Foundry is what keeps those
+  # greps from turning into a mystery failure the day the output format shifts.
+  FOUNDRY_VERSION: v1.5.1
+  FOUNDRY_DISABLE_NIGHTLY_WARNING: "true"
+
+jobs:
+  rehearsal:
+    name: anvil end to end
+    runs-on: ubuntu-latest
+    # Generous because a cold via_ir compile is most of it. If this is routinely hitting the limit,
+    # the compilation cache below has stopped working and that is the thing to look at.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out, submodules included
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install Foundry
+        # Brings forge, cast and anvil. The script needs all three and checks for them itself, and
+        # it puts $HOME/.foundry/bin on PATH, which is where this action installs.
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+          cache: false
+
+      - name: Set up node
+        # The script reads its address book out of JSON with node rather than jq, because node is
+        # already a dependency of this repository and jq is not installed everywhere.
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+
+      - name: Restore the solc and compilation caches
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: |
+            ~/.svm
+            evm/cache
+            evm/out
+          key: foundry-${{ runner.os }}-solc0.8.28-${{ hashFiles('evm/foundry.toml', 'evm/remappings.txt', 'evm/src/**/*.sol', 'evm/test/**/*.sol', 'evm/script/**/*.sol') }}
+          restore-keys: |
+            foundry-${{ runner.os }}-solc0.8.28-
+
+      - name: Report the tool versions
+        run: |
+          forge --version
+          anvil --version
+          cast --version
+          node --version
+
+      - name: Build once, up front
+        # So a compile failure reads as a compile failure rather than as a deployment failure forty
+        # lines into the script's log. Remember that deny = "warnings" is set and the linter runs
+        # here, so a Solidity warning stops this job.
+        working-directory: evm
+        run: forge build
+
+      - name: Rehearse the deployment
+        # No secrets, no RPC url, no key. The script starts its own anvil, refuses to run against
+        # any chain id other than a local one, and signs with anvil's three published test
+        # accounts, which are funded only on a throwaway chain and appear nowhere else in this
+        # repository.
+        run: script/anvil-e2e.sh
+
+      - name: Dump the logs if it failed
+        # The script sends the noisy parts of each phase to /tmp and only prints the lines worth
+        # reading. When it fails, those files are the whole diagnosis, and without this step they
+        # vanish with the runner.
+        if: failure()
+        run: |
+          set -uo pipefail
+          for log in /tmp/hyperion-anvil.log /tmp/hyperion-rails.log /tmp/hyperion-early.log; do
+            if [ -f "$log" ]; then
+              echo "::group::$log"
+              tail -200 "$log"
+              echo "::endgroup::"
+            else
+              echo "$log was never written"
+            fi
+          done
+          {
+            echo "### The deployment rehearsal failed"
+            echo
+            echo "Reproduce it locally with:"
+            echo
+            echo '```'
+            echo "script/anvil-e2e.sh"
+            echo '```'
+            echo
+            echo "It starts its own anvil and needs no configuration. The logs it keeps are under"
+            echo "\`/tmp/hyperion-*.log\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Say so in the summary when it worked
+        if: success()
+        run: |
+          {
+            echo "### Deployment rehearsal passed"
+            echo
+            echo "Phase one deployed and queued, the timelock refused an early phase two, phase two"
+            echo "executed after the warp and was idempotent on a second run, the chain matched the"
+            echo "deployment record, and one transfer went through the result."
+          } >> "$GITHUB_STEP_SUMMARY"

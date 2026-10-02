@@ -1,0 +1,163 @@
+# Dependency updates.
+#
+# Two things this file is trying to get right.
+#
+# Weekly, not daily. A daily schedule on five ecosystems produces more pull requests than anybody
+# reads, and the failure mode is not that the updates pile up. It is that somebody starts merging
+# them without looking, and then a dependency update is the one change in the repository that
+# nobody reviews. Weekly is often enough that a published advisory surfaces within days, and rare
+# enough that each pull request still gets read.
+#
+# Grouped where the group is genuinely one decision. Bumping eslint on its own and then
+# typescript-eslint on its own produces two pull requests that each fail until the other lands.
+# Ungrouped where each bump needs its own judgement, which is the contract dependencies and the
+# submodules.
+#
+# Commit message prefixes follow the repository's own style: a short area name, then an imperative
+# subject.
+version: 2
+
+updates:
+  # ---------------------------------------------------------------------------------------------
+  # The Rust workspace. Five crates, and everything flows from soroban-sdk.
+  # ---------------------------------------------------------------------------------------------
+  - package-ecosystem: cargo
+    directory: /soroban
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "soroban"
+      include: scope
+    groups:
+      # Deliberately on its own and never grouped with anything. soroban-sdk decides the host
+      # functions available, the storage layout, the metadata stamped into the contract and the
+      # size of the wasm. A minor bump has landed over the 64KB ledger limit before, which is a
+      # failed build rather than a subtle problem, but it still needs a build and a look at the
+      # size table rather than a merge.
+      soroban-sdk:
+        patterns:
+          - soroban-sdk
+          - soroban-*
+      # Test only. proptest and friends cannot reach the deployed wasm, so these can move together.
+      rust-test-tools:
+        dependency-type: development
+        patterns:
+          - "*"
+        exclude-patterns:
+          - soroban-sdk
+          - soroban-*
+
+  # ---------------------------------------------------------------------------------------------
+  # The shared TypeScript package. Every dependency here is a devDependency: the published package
+  # has no runtime dependencies at all.
+  # ---------------------------------------------------------------------------------------------
+  - package-ecosystem: npm
+    directory: /packages/protocol
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "protocol"
+      include: scope
+    groups:
+      # These four have to move together or they do not move. typescript-eslint's supported
+      # TypeScript range is the constraint, eslint's plugin API is the other, and a pull request
+      # that bumps one of them alone is a pull request that fails lint for a reason unrelated to
+      # anything anybody changed.
+      typescript-toolchain:
+        patterns:
+          - typescript
+          - typescript-eslint
+          - eslint
+          - "@types/node"
+      # vitest and its coverage provider are versioned together upstream and will not work apart.
+      vitest:
+        patterns:
+          - vitest
+          - "@vitest/*"
+      # Everything else here is a formatter or similar: one decision, one pull request.
+      tooling:
+        patterns:
+          - prettier
+    # viem is deliberately left out of every group above so it arrives on its own. It is used by
+    # the artifact generator to compute error selectors and by the parity test to check them, which
+    # means a viem change can move a selector table that is committed to this repository. That is
+    # the one devDependency here whose output is a file somebody ships.
+
+  # ---------------------------------------------------------------------------------------------
+  # The EVM package, which exists only to pin solhint.
+  # ---------------------------------------------------------------------------------------------
+  - package-ecosystem: npm
+    directory: /evm
+    schedule:
+      # Monthly, because there is exactly one dependency and a new solhint release is not urgent.
+      # The three solhint configs in this directory have --max-warnings 0 behind them, so a release
+      # that adds a rule turns into a failing lint, which is worth landing deliberately rather than
+      # on a Monday morning.
+      interval: monthly
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "evm"
+      include: scope
+
+  # ---------------------------------------------------------------------------------------------
+  # The workflows in this directory.
+  # ---------------------------------------------------------------------------------------------
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "ci"
+      include: scope
+    groups:
+      # One pull request for all of them. Every action in these workflows is pinned to a full
+      # commit sha with the version in a trailing comment, and dependabot updates both the sha and
+      # the comment, so the diff is readable and the review question is the same for all of them:
+      # does the new sha really belong to the version the comment now claims.
+      #
+      # Keep the pinning style when reviewing one of these. A floating tag in a workflow that can
+      # read the repository is a supply chain hole: whoever controls the tag controls what runs.
+      actions:
+        patterns:
+          - "*"
+
+  # ---------------------------------------------------------------------------------------------
+  # The committed submodules under evm/lib: forge-std and OpenZeppelin.
+  # ---------------------------------------------------------------------------------------------
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      # Monthly and ungrouped, one pull request at a time. An OpenZeppelin or forge-std bump moves
+      # the ground under every test in the EVM suite, and the review is not "did CI pass" but
+      # "what changed in the parts we inherit from". That is an afternoon, not a merge.
+      interval: monthly
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "evm/lib"
+      include: scope
+    # Read this before merging one of these.
+    #
+    # Dependabot updates a git submodule to the newest commit on the branch it tracks, which is the
+    # upstream default branch. It does not move it to the newest tagged release. forge-std and
+    # OpenZeppelin are pinned here to release revisions on purpose, because the whole reason they
+    # are submodules rather than registry dependencies is that a clone should get the exact code
+    # the suite was audited against.
+    #
+    # So treat a pull request from this entry as a notification that upstream moved, not as a bump
+    # to merge. The real update is done by hand: check out the submodule, move it to the tagged
+    # release you actually want, and open that as its own pull request with the upstream changelog
+    # in the description. Merging dependabot's version as it arrives would leave the repository
+    # pinned to an arbitrary commit on somebody else's main branch, which is strictly worse than
+    # the floating registry dependency the submodules were chosen to avoid.

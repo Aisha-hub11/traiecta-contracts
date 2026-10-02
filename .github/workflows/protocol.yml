@@ -1,0 +1,158 @@
+name: protocol
+
+# The shared TypeScript package, plus the check that keeps it honest about the contracts.
+#
+# This job needs Foundry even though it tests TypeScript. packages/protocol/src/abi is generated
+# from the Foundry build output, and test/parity.test.ts reads the Rust, the Solidity and the
+# compiled artifacts off disk and compares all three. Without a forge build first, the parity test
+# fails for want of evm/out and tells you nothing about the change.
+#
+# Called by ci.yml, which holds the concurrency group.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FOUNDRY_VERSION: v1.5.1
+  FOUNDRY_DISABLE_NIGHTLY_WARNING: "true"
+
+jobs:
+  protocol:
+    name: check and ABI parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out, submodules included
+        # Needed because the forge build below compiles against forge-std and OpenZeppelin, which
+        # live under evm/lib as committed submodules.
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+          cache: false
+
+      - name: Restore the solc and compilation caches
+        # Shares the key shape with evm.yml so the two jobs can hit each other's entries. Both
+        # compile the same sources with the same settings, and paying for via_ir twice per run is
+        # a waste of a runner.
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: |
+            ~/.svm
+            evm/cache
+            evm/out
+          key: foundry-${{ runner.os }}-solc0.8.28-${{ hashFiles('evm/foundry.toml', 'evm/remappings.txt', 'evm/src/**/*.sol', 'evm/test/**/*.sol', 'evm/script/**/*.sol') }}
+          restore-keys: |
+            foundry-${{ runner.os }}-solc0.8.28-
+
+      - name: Build the contracts
+        # Produces evm/out, which is what scripts/gen-artifacts.mjs reads. Note that foundry.toml
+        # sets deny = "warnings" and runs the linter during the build, so a Solidity warning fails
+        # this TypeScript job. That is not a mistake: the ABI this package ships comes out of this
+        # compile, so a compile nobody trusts is an SDK nobody should trust either.
+        working-directory: evm
+        run: forge build
+
+      - name: Set up node
+        # The package's engines floor is node >=20.11. 22 is the active LTS line, which is the
+        # version a contributor is most likely to have. A matrix over 20, 22 and 24 is the right
+        # answer the day this package is published for consumers outside this repository, and
+        # premature before that.
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/protocol/package-lock.json
+
+      - name: Install
+        # Run from inside the package, not from the repository root with --prefix. The install
+        # depends on packages/protocol/.npmrc, which sets legacy-peer-deps because npm's peer
+        # resolver walks the viem to abitype to typescript conflict into a null node and dies
+        # before it writes a single file. npm reads that file from the working directory, so a
+        # root level install would skip it and fail for a reason that looks like a broken
+        # lockfile. The flag belongs in the committed .npmrc rather than on this command line,
+        # because an install flag that only exists in CI is a build that only works in CI.
+        working-directory: packages/protocol
+        run: npm ci
+
+      - name: npm run check
+        # fmt:check, then eslint, then tsc --noEmit, then vitest, then the real build, in that
+        # order, defined by the package rather than by this workflow. One script means a
+        # contributor running `npm run check` locally gets the same verdict as the branch gate,
+        # and there is no second list here to drift out of step with the first.
+        working-directory: packages/protocol
+        run: npm run check
+
+      - name: The committed ABI has to match the build
+        # The most load bearing step in this job.
+        #
+        # src/abi is generated from the Foundry artifacts. If somebody changes a contract and does
+        # not regenerate, or hand edits a generated file, the SDK and the chain start disagreeing,
+        # and the failure mode is not an error. It is a decode that returns a plausible value from
+        # the wrong field, which on this codebase means naming the wrong error or crediting the
+        # wrong sub account.
+        #
+        # parity.test.ts already regenerates in memory and compares, so npm run check above would
+        # catch most of this. This step catches the rest: a file that is byte identical in content
+        # but was never committed, and a new generated module that nobody added. It is cheap and
+        # it checks the thing the repository actually ships.
+        working-directory: packages/protocol
+        run: |
+          set -euo pipefail
+          npm run gen
+
+          dirty=0
+          if ! git diff --quiet -- src/abi; then
+            dirty=1
+          fi
+          untracked=$(git ls-files --others --exclude-standard -- src/abi)
+          if [ -n "$untracked" ]; then
+            dirty=1
+          fi
+
+          if [ "$dirty" -ne 0 ]; then
+            echo "The committed ABI does not match what the current contracts compile to."
+            echo
+            echo "Changed:"
+            git --no-pager diff --stat -- src/abi
+            if [ -n "$untracked" ]; then
+              echo
+              echo "Generated but never committed:"
+              echo "$untracked"
+            fi
+            echo
+            echo "Fix it by running the generator and committing the result, not by editing"
+            echo "src/abi by hand:"
+            echo
+            echo "    cd evm && forge build"
+            echo "    cd ../packages/protocol && npm run gen"
+            echo
+            {
+              echo "### The committed ABI has drifted"
+              echo
+              echo "\`packages/protocol/src/abi\` is generated from the Foundry build and does not"
+              echo "match the current contracts. Run \`forge build\` in \`evm\`, then"
+              echo "\`npm run gen\` in \`packages/protocol\`, and commit what it writes."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "The committed ABI matches the build."
+
+      - name: Show the full diff if the generator moved anything else
+        # A diagnostic, not a gate. If the step above failed, this prints the whole diff so a
+        # reviewer can see what moved without checking out the branch.
+        if: failure()
+        working-directory: packages/protocol
+        run: git --no-pager diff -- src/abi || true

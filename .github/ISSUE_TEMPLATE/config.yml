@@ -1,0 +1,32 @@
+# Blank issues are off.
+#
+# Not to make reporting harder. The forms ask for the things that decide whether a report is
+# actionable: which chain, which rail, which commit, and a transaction anybody can look up. A blank
+# issue reliably arrives without them, and the round trip to collect them costs the reporter more
+# time than filling the form would have.
+#
+# The security link is first on purpose, so the one kind of report that must not be public is the
+# first thing anybody opening this menu reads.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Report a vulnerability privately
+    url: https://github.com/StellarHyperion/stellarhyperion-contracts/security/advisories/new
+    about: >-
+      Use this for anything that could let somebody take funds, block a transfer, or bypass a
+      limit. It opens a private advisory that only the maintainers can read. Do not open a public
+      issue for it, and please do not post a proof of concept anywhere public first.
+
+  - name: Read the security policy
+    url: https://github.com/StellarHyperion/stellarhyperion-contracts/blob/main/.github/SECURITY.md
+    about: >-
+      What is in scope, what is not, and what to expect after you report. Worth two minutes before
+      you write, because the rails Hyperion routes over are explicitly out of scope and that is
+      where a good fraction of reports land.
+
+  - name: How to set up the three toolchains and run the suites
+    url: https://github.com/StellarHyperion/stellarhyperion-contracts/blob/main/.github/CONTRIBUTING.md
+    about: >-
+      If something will not build, start here. Two things catch almost everybody, and both are
+      written down: forge build treats warnings as errors, and the ABI files in the protocol
+      package are generated rather than written.

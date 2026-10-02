@@ -1,0 +1,187 @@
+name: soroban
+
+# The Stellar half: format, lint, test, build, and refuse a contract the ledger would reject.
+#
+# Called by ci.yml rather than triggered on its own. The concurrency group lives on the caller
+# because a group declared in a called workflow competes with the caller's group over the same
+# run, which is the documented way to wedge a workflow. workflow_dispatch is kept so a maintainer
+# can run only the Stellar side without opening a pull request.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  # Nothing here publishes, comments, or reads a secret. Reading the tree is the whole need.
+  contents: read
+
+env:
+  # Pinned on purpose. The CLI decides the wasm target triple, the metadata it stamps into the
+  # contract, and the build profile, so an unpinned CLI means the artifact that passes this job is
+  # not the artifact a release built. 28.1.0 matches the soroban-sdk 28.0.0 line in Cargo.toml.
+  STELLAR_CLI_VERSION: 28.1.0
+  # sha256 of stellar-cli-28.1.0-x86_64-unknown-linux-gnu.tar.gz, taken from the GitHub release
+  # API record for v28.1.0. A version pin on its own still trusts anyone who can replace a release
+  # asset; the checksum is what turns the pin into a guarantee.
+  STELLAR_CLI_SHA256: c1680deee94301d33ada7a17f98411e642a4248c727afbd2e43050d345746462
+  CARGO_TERM_COLOR: always
+
+jobs:
+  soroban:
+    name: fmt, clippy, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: soroban
+
+    steps:
+      - name: Check out
+        # Submodules are skipped here. forge-std and OpenZeppelin live under evm/lib and the Rust
+        # workspace does not touch either, so pulling them would cost a minute for nothing.
+        # persist-credentials is off because no step after this one needs to talk to the remote,
+        # and a token left in .git/config is a token a later step can read.
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - name: Install the toolchain the repository pins
+        # No third party action for this. soroban/rust-toolchain.toml already names the channel,
+        # the wasm32v1-none target and the rustfmt and clippy components, and bare rustup honours
+        # that file. Reading the pin from the repository means there is one place to change it,
+        # and it is one less action with a SHA to keep current.
+        run: |
+          rustup toolchain install --profile minimal
+          rustup show
+          cargo --version
+          rustc --version
+
+      - name: Restore the cargo cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # Named explicitly rather than inferred, because the workspace is not at the repository
+          # root and the action looks there by default. Getting this wrong produces a job that
+          # appears to cache and never hits.
+          workspaces: soroban -> target
+          # Same cache for every job in this file, so the clippy build and the test build share
+          # dependency artifacts instead of compiling soroban-sdk twice.
+          shared-key: soroban
+
+      - name: cargo fmt
+        # Formatting is checked first because it is the cheapest failure in the job. Finding out
+        # about an unformatted file after a twenty minute test run wastes a contributor's
+        # afternoon for something a save hook fixes.
+        run: cargo fmt --all --check
+
+      - name: cargo clippy
+        # --all-targets covers the test code too. Tests are where a careless unwrap or a shadowed
+        # binding hides longest, and a lint that only runs over src is a lint with a blind spot
+        # exactly where the fixtures live.
+        #
+        # -D warnings after the separator applies to the crates in this workspace and not to the
+        # dependency graph, which is the behaviour wanted: an upstream warning in soroban-sdk is
+        # not something a pull request here can fix, and a gate nobody can clear gets disabled.
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        # The adapters test against the real router rather than a stand in for it, so this runs
+        # the whole workspace together. A per crate run would pass while the handover between
+        # the router and an adapter was broken, which is the part most worth checking.
+        run: cargo test --workspace
+
+      - name: Restore the pinned stellar-cli
+        id: stellar-cli-cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ~/.local/bin/stellar
+          # Keyed on the version alone, which is correct: the binary for a given release never
+          # changes, so a hit is always valid and a version bump always misses.
+          key: stellar-cli-${{ env.STELLAR_CLI_VERSION }}-x86_64-unknown-linux-gnu
+
+      - name: Install stellar-cli
+        if: steps.stellar-cli-cache.outputs.cache-hit != 'true'
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          tarball="stellar-cli-${STELLAR_CLI_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "$tarball" \
+            "https://github.com/stellar/stellar-cli/releases/download/v${STELLAR_CLI_VERSION}/${tarball}"
+          # If this check fails the job stops here rather than building a contract with a binary
+          # nobody can account for.
+          echo "${STELLAR_CLI_SHA256}  ${tarball}" | sha256sum --check --strict
+          tar -xzf "$tarball" -C "$HOME/.local/bin" stellar
+          chmod +x "$HOME/.local/bin/stellar"
+
+      - name: Put stellar on PATH and report the version
+        run: |
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/stellar" --version
+
+      - name: Build the contracts and hold them to the 64KB ledger limit
+        # This runs the repository's own script rather than reimplementing it. The 64KB ceiling and
+        # the two thirds warning line live in script/stellar/build.sh, so a contributor running it
+        # locally and this branch gate are literally the same check. Duplicating the constant here
+        # would mean a future change to the limit lands in one of two places and the two disagree
+        # quietly.
+        working-directory: .
+        run: script/stellar/build.sh
+
+      - name: Report the wasm sizes
+        # Runs even when the build step failed, because the first question after an over limit
+        # failure is which contract and by how much, and that answer belongs in the summary rather
+        # than forty lines deep in a log.
+        if: always()
+        working-directory: .
+        run: |
+          set -uo pipefail
+          limit=$((64 * 1024))
+          wasm_dir="soroban/target/wasm32v1-none/release"
+          {
+            echo "### Soroban wasm sizes"
+            echo
+            echo "The ledger rejects a contract whose wasm exceeds 64KB. Anything past about two"
+            echo "thirds of that has stopped having room for the next feature."
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          shopt -s nullglob
+          found=0
+          {
+            echo "| contract | bytes | KB | share of the 64KB limit |"
+            echo "| --- | ---: | ---: | ---: |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for wasm in "$wasm_dir"/hyperion_*.wasm; do
+            found=1
+            size=$(stat -c%s "$wasm")
+            kb=$(awk -v s="$size" 'BEGIN { printf "%.1f", s / 1024 }')
+            pct=$((size * 100 / limit))
+            note=""
+            if [ "$size" -gt "$limit" ]; then
+              note=" (over the limit, cannot be deployed)"
+            elif [ "$size" -gt $((limit * 2 / 3)) ]; then
+              note=" (running out of room)"
+            fi
+            printf '| `%s` | %s | %s | %s%%%s |\n' \
+              "$(basename "$wasm")" "$size" "$kb" "$pct" "$note" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          if [ "$found" -eq 0 ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "No wasm was produced. The build step above did not get far enough to emit one." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Keep the wasm for the run
+        # Useful for two things: diffing a size regression against the previous run, and handing
+        # a reviewer the exact bytes a pull request produces without asking them to build it.
+        if: success()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: soroban-wasm-${{ github.sha }}
+          path: soroban/target/wasm32v1-none/release/hyperion_*.wasm
+          if-no-files-found: error
+          retention-days: 14

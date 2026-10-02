@@ -1,0 +1,138 @@
+name: Rail or chain integration request
+description: Ask for a new rail, a new chain, or a new asset on an existing route.
+title: "integration: "
+labels:
+  - integration
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Hyperion owns no rails. Every route it carries is a rail that was already live, already
+        audited by somebody else, and already carrying real volume, and Hyperion keeps the
+        bookkeeping, the limits and the fees on top. Adding a rail therefore is not mostly a
+        coding question. It is a question about whose correctness a user's funds now depend on.
+
+        That is why this form asks about the trust model before it asks about the interface. If
+        the trust answers are not there, the adapter cannot be reviewed, however clean it is.
+
+        An honest "I do not know" in any field below is far more useful than a guess. It tells us
+        what to go and find out.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What are you asking for
+      options:
+        - A new rail (a new bridge or messaging protocol)
+        - A new chain on an existing rail
+        - A new asset on an existing rail and chain
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: name
+    attributes:
+      label: Name it
+      description: The rail, the chain, or the asset, with the chain it lives on.
+      placeholder: Wormhole NTT, or Polygon on Axelar ITS, or EURC on CCTP for Base
+    validations:
+      required: true
+
+  - type: textarea
+    id: operator
+    attributes:
+      label: Who operates it, and what has been audited
+      description: >-
+        Who runs the thing, what the governance looks like, and links to published audits with
+        dates. "It is audited" is not an answer anybody can check; a report with a date and a scope
+        is. If there is no audit, say so plainly. That is not automatically a refusal, but it
+        changes the conversation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: trust
+    attributes:
+      label: What has to behave correctly for a user's funds to be safe
+      description: >-
+        The central question. Name the parties. A validator set and its threshold, a multisig and
+        its signers, an attestation service and who can sign for it, a relayer and whether anybody
+        else can relay if it stops, an upgrade key and who holds it, a liquidity pool and who can
+        drain it.
+
+        Then say what happens to a transfer that is already in flight if each of those parties
+        misbehaves or simply goes away. A rail where a stuck transfer can be recovered by the
+        sender is a very different proposition from one where it cannot.
+    validations:
+      required: true
+
+  - type: textarea
+    id: mechanics
+    attributes:
+      label: The three things the router asks about every rail
+      description: >-
+        These are not trivia. Each one changes what the interface is allowed to promise, and the
+        router refuses combinations that do not work rather than silently dropping information.
+      value: |
+        Does the second leg wait on an attestation somebody has to go and fetch, or is it
+        delivered by the rail itself?
+        (This is the difference between about fifteen minutes and about fifteen seconds, and it is
+        the first thing a user wants to know.)
+
+        Does it move the asset itself, or a pooled or wrapped stand in?
+        (A canonical route cannot slip. A pooled one can run thin.)
+
+        Can it carry a payload alongside the money?
+        (Allbridge Core cannot, which is why a muxed Stellar destination has nowhere to put its
+        sixty four bit sub account id, and why the router refuses that combination outright instead
+        of dropping the id and sending the money to the wrong sub account.)
+    validations:
+      required: true
+
+  - type: textarea
+    id: interface
+    attributes:
+      label: The interface, and where it is deployed
+      description: >-
+        Links to the contract source and to deployed addresses or contract ids on every chain this
+        would cover, mainnet and testnet. Say which addresses you verified yourself and how,
+        because an address from a documentation page is how a rail adapter ends up pointed at a
+        fork.
+    validations:
+      required: true
+
+  - type: textarea
+    id: demand
+    attributes:
+      label: Who needs this and for what
+      description: >-
+        Realistic volume and a real use case. A rail that nobody routes over is still a rail that
+        has to be kept working, re audited on every upgrade, and accounted for in every future
+        change to the shared libraries. Every route added makes the next change more expensive, so
+        it is fair to ask what this one buys.
+    validations:
+      required: true
+
+  - type: textarea
+    id: offer
+    attributes:
+      label: Are you offering to build it
+      description: >-
+        Entirely optional and it does not affect whether this gets accepted. If yes, say whether
+        you have written a Soroban contract or a Foundry test suite before, so review can be
+        pitched usefully rather than either condescending or over your head.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before you submit
+      options:
+        - label: >-
+            I have read that the rails themselves are out of scope for this repository's security
+            policy, and I understand that an adapter here cannot make an unsafe rail safe.
+          required: true
+        - label: >-
+            The trust question above is answered with named parties, or I have said which parts I
+            could not find out.
+          required: true

@@ -1,0 +1,196 @@
+name: evm
+
+# The EVM half: format, lint, compile, test, and two reports that are worth reading.
+#
+# Called by ci.yml. The concurrency group lives on the caller, because a group declared in a called
+# workflow competes with the caller's group over the same run. workflow_dispatch is kept so the
+# Solidity suite can be run on its own.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Matches the toolchain the suite was written against. foundry.toml pins solc 0.8.28 and the
+  # cancun EVM, but the Foundry version decides the fuzzer, the linter and the coverage
+  # instrumentation, so an unpinned forge means a green branch today and a red one tomorrow for
+  # reasons nobody changed.
+  FOUNDRY_VERSION: v1.5.1
+  FOUNDRY_DISABLE_NIGHTLY_WARNING: "true"
+
+jobs:
+  evm:
+    name: fmt, lint, build, test, reports
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: evm
+
+    steps:
+      - name: Check out, submodules included
+        # forge-std and OpenZeppelin are committed as git submodules under evm/lib, deliberately,
+        # so a clone gets the exact revision the suite was run against rather than whatever a
+        # registry resolves to today. Without submodules every import fails and the job is a
+        # minute of confusing compiler output.
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+          # The action's own cache holds forked RPC responses. Nothing in this repository forks a
+          # network, so that cache would only ever grow and never be read.
+          cache: false
+
+      - name: Restore the solc and compilation caches
+        # Two separate wins. ~/.svm is the downloaded solc 0.8.28 binary, which is a fixed cost per
+        # runner. evm/cache and evm/out are Foundry's incremental build state, and with via_ir and
+        # 20000 optimizer runs a cold compile is the single slowest thing in this repository.
+        #
+        # The key does not need to be exact. Foundry hashes every source file itself and
+        # recompiles whatever moved, so a partial hit from restore-keys is strictly better than a
+        # cold start and can never produce a stale artifact.
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: |
+            ~/.svm
+            evm/cache
+            evm/out
+          key: foundry-${{ runner.os }}-solc0.8.28-${{ hashFiles('evm/foundry.toml', 'evm/remappings.txt', 'evm/src/**/*.sol', 'evm/test/**/*.sol', 'evm/script/**/*.sol') }}
+          restore-keys: |
+            foundry-${{ runner.os }}-solc0.8.28-
+
+      - name: Report the Foundry version
+        run: forge --version
+
+      - name: forge fmt
+        # First because it is the cheapest thing that can fail. foundry.toml fixes line length at
+        # 110, sorts imports and spells out the integer types, so there is nothing here to argue
+        # about in review.
+        run: forge fmt --check
+
+      - name: Set up node for solhint
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: evm/package-lock.json
+
+      - name: Install solhint
+        # solhint 6.2.4 is the only dependency this package has, and npm ci installs exactly what
+        # the committed lockfile says.
+        run: npm ci
+
+      - name: solhint
+        # Three configs, because the rules that should hold for a deployed contract are not the
+        # rules that should hold for an interface file or for a test. This step exists because a
+        # lint config that no gate runs is a lint config that quietly stops being true, and then
+        # somebody enables it a year later and has four hundred findings to triage.
+        run: npm run lint
+
+      - name: forge build
+        # Worth knowing before this fails on you: foundry.toml sets deny = "warnings", and the
+        # Solidity linter runs as part of the build. A shadowed name or an unreachable branch is a
+        # failed build here, not a note in the log. That is the point. A warning nobody has to
+        # clear is a warning everybody scrolls past, and the two lints that genuinely did not earn
+        # their keep are already listed with reasons under [lint] exclude_lints.
+        run: forge build
+
+      - name: forge test
+        # The ci profile raises the fuzzer to 20000 runs and the invariant depth to 128, which is
+        # time a contributor waiting on a save does not have and a branch gate does. It spends it
+        # on the amount and address codecs, where a single rare input is the whole risk.
+        #
+        # -vvv prints traces for failures only, which is the difference between a reviewer
+        # diagnosing a fuzz counterexample from the log and a reviewer reproducing it by hand.
+        env:
+          FOUNDRY_PROFILE: ci
+        run: forge test -vvv
+
+      - name: Gas report
+        # Deliberately on the default profile rather than ci. Gas numbers do not get more accurate
+        # with 20000 fuzz runs, and sharing a run with the -vvv traces above would make both
+        # unreadable. foundry.toml already narrows the report to the router and the two adapters,
+        # which are the contracts whose cost anyone actually pays.
+        #
+        # No threshold is enforced. A gas budget invented without a measurement behind it becomes
+        # a number people route around. Read the table in review and argue about the movement.
+        run: |
+          set -o pipefail
+          forge test --gas-report | tee gas-report.txt
+
+      - name: Put the gas report in the summary
+        if: always()
+        run: |
+          set -uo pipefail
+          {
+            echo "### Gas"
+            echo
+            if [ -s gas-report.txt ]; then
+              echo "Default profile. Only the router and the rail adapters are reported, which is"
+              echo "what foundry.toml asks for."
+              echo
+              echo '```'
+              # The tail rather than a grep for the table. Foundry draws these tables with box
+              # characters and has changed the style between releases, so a pattern that looked
+              # right once would quietly produce an empty section later. The table is always at
+              # the end, and the whole output is in the artifact.
+              tail -n 160 gas-report.txt
+              echo '```'
+            else
+              echo "No gas report was produced. The test step did not get that far."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: forge coverage
+        # --ir-minimum is not optional here. via_ir is on, and coverage instrumentation on the
+        # full IR pipeline runs out of stack slots on the codec heavy libraries. evm/package.json
+        # already encodes this as `npm run coverage` so a local run matches.
+        #
+        # Again no threshold. A percentage gate on a contracts repository rewards tests that touch
+        # a line without asserting anything about it, and the suite here is judged on whether the
+        # fuzz and invariant tests say something true, which no counter measures.
+        run: |
+          set -o pipefail
+          forge coverage --ir-minimum --report summary --report lcov | tee coverage-summary.txt
+
+      - name: Put the coverage summary in the summary
+        if: always()
+        run: |
+          set -uo pipefail
+          {
+            echo "### Coverage"
+            echo
+            if [ -s coverage-summary.txt ]; then
+              echo '```'
+              # Same reasoning as the gas table above: take the end of the output rather than
+              # trying to match the table's borders.
+              tail -n 100 coverage-summary.txt
+              echo '```'
+              echo
+              echo "Read the libraries and the adapters. Low coverage on a mock is fine; low"
+              echo "coverage on AmountMath or StellarAddress is not."
+            else
+              echo "No coverage summary was produced."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the coverage data
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: evm-coverage-${{ github.sha }}
+          path: |
+            evm/lcov.info
+            evm/coverage-summary.txt
+            evm/gas-report.txt
+          if-no-files-found: warn
+          retention-days: 14

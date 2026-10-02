@@ -1,0 +1,170 @@
+name: Bug report
+description: Something in the contracts, the scripts or the protocol package behaves wrongly.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before anything else: if what you found could let somebody take funds, block a transfer or
+        get past a limit, close this and
+        [open a private advisory](https://github.com/StellarHyperion/stellarhyperion-contracts/security/advisories/new)
+        instead. A public issue with a working exploit in it is a race between the fix and whoever
+        reads it next.
+
+        For everything else, the fields below are the ones that decide whether this can be
+        reproduced today or argued about for a week.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where is it
+      description: Best guess is fine. Being wrong here costs nothing.
+      options:
+        - Soroban contracts (soroban/crates)
+        - EVM contracts (evm/src)
+        - EVM deploy or verify scripts (evm/script)
+        - Stellar deploy scripts (script/stellar)
+        - The anvil rehearsal (script/anvil-e2e.sh)
+        - Protocol package (packages/protocol)
+        - CI workflows
+        - Documentation
+        - Somewhere else, or no idea
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: Which revision
+      description: >-
+        A commit sha, a tag, or a released package version. "Latest main" is not enough, because
+        main moves and the answer to "is this still broken" depends on which main.
+      placeholder: 9f3c1ad, or @hyperion/protocol 0.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: chain
+    attributes:
+      label: Which chain
+      description: >-
+        If it reproduces on a local node, say so. A local reproduction is the most useful kind,
+        because it costs nobody a fee to check.
+      options:
+        - Local anvil
+        - Local Stellar quickstart
+        - Stellar testnet
+        - Stellar mainnet
+        - Ethereum Sepolia
+        - Ethereum mainnet
+        - Base Sepolia
+        - Base mainnet
+        - Arc testnet
+        - Arc mainnet
+        - Not chain specific
+    validations:
+      required: true
+
+  - type: dropdown
+    id: rail
+    attributes:
+      label: Which rail
+      description: Leave as not applicable if the problem is in shared code rather than on a route.
+      options:
+        - Circle CCTP V2
+        - Axelar Interchain Token Service
+        - Axelar General Message Passing
+        - Allbridge Core
+        - More than one
+        - Not applicable
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: >-
+        What you observed. If a call reverted, paste the revert data or the error name. The
+        protocol package can name an error from the first four bytes of revert data, and
+        `packages/protocol/src/errors.ts` carries a sentence of help for every error both chains
+        can emit, so an error name is usually most of a diagnosis.
+      placeholder: |
+        Called quote() on the router for a muxed Stellar destination over Allbridge and got
+        0x... back, which errorNameFromRevert says is PayloadUnsupported. I expected a quote with
+        a blocker on it rather than a revert.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+      description: >-
+        And where that expectation came from, if there is a source: a doc, a comment, the
+        behaviour on the other chain, the way it worked last week.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: >-
+        The field that decides how fast this gets fixed. A failing test is the best form of this,
+        and a patch adding one is welcome in the same breath as the report. Failing that, exact
+        commands, exact inputs, and the amount and decimals involved if money is in it, because
+        off by one decimal reproduces as a completely different bug.
+      placeholder: |
+        1. cd evm && forge build
+        2. forge test --match-test testQuoteMuxedOverAllbridge -vvv
+        3. It reverts. Expected a QuoteBlocker.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: onchain
+    attributes:
+      label: On chain references
+      description: >-
+        Transaction hashes, contract ids, addresses. Anything somebody else can look up without
+        asking you for more. Leave empty if this never reached a chain.
+      placeholder: |
+        router: 0x...
+        tx: 0x...
+        stellar contract: C...
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Toolchain versions
+      description: >-
+        Only for a build or a test failure, and then it is usually the whole answer. Paste the
+        output of whichever of these applies.
+      value: |
+        forge --version:
+        stellar --version:
+        rustc --version:
+        node --version:
+        os:
+      render: shell
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before you submit
+      options:
+        - label: >-
+            This is not an undisclosed vulnerability. Nothing here lets somebody take funds, block
+            a transfer, or bypass a limit.
+          required: true
+        - label: >-
+            I looked for an existing issue describing the same thing.
+          required: true
+        - label: >-
+            If this is a build failure, I have read the two known traps in CONTRIBUTING.md: forge
+            build treats warnings as errors, and the protocol package ABI files are generated.
+          required: false

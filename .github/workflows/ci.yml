@@ -1,0 +1,144 @@
+name: ci
+
+# The only workflow with real triggers. Everything else in this directory is a reusable workflow
+# that this one calls.
+#
+# Why it is arranged this way. `needs:` cannot reach across workflow files, so a repository with
+# five independent workflow files cannot have one job that waits on all of them, and branch
+# protection ends up listing five check names that somebody has to keep in step with the files on
+# disk. Rename a workflow and the protection rule silently stops protecting anything. Calling the
+# five as jobs from here gives real dependency edges, so there is exactly one name to protect:
+#
+#     gate
+#
+# Point branch protection at that and nothing else. It passes only when all five passed.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # So the queue runs the same checks as the pull request did, against the merged result. Without
+  # this, a merge queue would report green off the pull request's run and merge something it never
+  # tested.
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  # Set once here and narrowed nowhere, because nothing in the tree below needs more. A called
+  # workflow cannot grant itself permissions the caller did not have, so this line is the ceiling
+  # for every job in the run.
+  contents: read
+
+concurrency:
+  # One group per pull request, and a separate group per branch and per merge queue entry.
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Superseded pull request runs are cancelled, because the only interesting answer is about the
+  # newest commit and a contracts run here costs real runner minutes.
+  #
+  # Pushes to main are not cancelled. Each commit on main is a thing somebody may later need to
+  # know the status of, and a cancelled run leaves no answer at all.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # No path filters on any of these, on purpose, and it is worth saying why because the omission
+  # looks like laziness.
+  #
+  # The three trees are coupled. packages/protocol/test/parity.test.ts reads the Rust enums, the
+  # Solidity error declarations and the compiled artifacts off disk and checks that all three agree
+  # on error names, route tags, address kinds, CCTP offsets and the note layout. So "only the Rust
+  # changed" is almost never true in the sense a path filter means it. A filter would have to
+  # encode that coupling, and the day somebody gets it slightly wrong is the day the SDK and the
+  # chain disagree with a green tick on the pull request.
+  #
+  # The second reason is mechanical. A job skipped by a path filter reports "skipped", not
+  # "success", so a required check that can be skipped blocks merges until somebody discovers the
+  # trick for treating skipped as passing. Running everything costs runner minutes. Getting this
+  # wrong costs a release.
+
+  soroban:
+    uses: ./.github/workflows/soroban.yml
+
+  evm:
+    uses: ./.github/workflows/evm.yml
+
+  protocol:
+    uses: ./.github/workflows/protocol.yml
+
+  rehearsal:
+    uses: ./.github/workflows/deploy-rehearsal.yml
+
+  security:
+    uses: ./.github/workflows/security.yml
+
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    needs:
+      - soroban
+      - evm
+      - protocol
+      - rehearsal
+      - security
+    # Without always() this job is skipped the moment any dependency fails, and a skipped required
+    # check is indistinguishable from a check that has not reported yet. Branch protection would
+    # wait forever instead of refusing the merge.
+    if: always()
+
+    steps:
+      - name: Every required check has to have passed
+        # Each result is named one by one rather than collected with join(needs.*.result). The
+        # order of needs.* is not the order written above, so a positional list would report the
+        # right verdict against the wrong label, and a gate that names the wrong failing job is
+        # worse than one that names none.
+        #
+        # The results arrive through the environment rather than being interpolated into the script
+        # body. They are a fixed vocabulary here so nothing could be smuggled in, but making the
+        # safe form the habit is cheaper than remembering which interpolations are safe.
+        #
+        # Anything other than success fails this job, "skipped" included. A dependency that
+        # silently stopped running is not a dependency that passed, and treating it as one is how a
+        # gate becomes decorative.
+        env:
+          SOROBAN: ${{ needs.soroban.result }}
+          EVM: ${{ needs.evm.result }}
+          PROTOCOL: ${{ needs.protocol.result }}
+          REHEARSAL: ${{ needs.rehearsal.result }}
+          SECURITY: ${{ needs.security.result }}
+        run: |
+          set -uo pipefail
+
+          failed=""
+          check() {
+            printf '  %-12s %s\n' "$1" "$2"
+            if [ "$2" != "success" ]; then
+              failed="$failed $1=$2"
+            fi
+          }
+
+          check soroban "${SOROBAN:-missing}"
+          check evm "${EVM:-missing}"
+          check protocol "${PROTOCOL:-missing}"
+          check rehearsal "${REHEARSAL:-missing}"
+          check security "${SECURITY:-missing}"
+
+          {
+            echo "### Gate"
+            echo
+            if [ -n "$failed" ]; then
+              echo "Not mergeable. These did not pass:"
+              echo
+              for entry in $failed; do
+                echo "- \`$entry\`"
+              done
+            else
+              echo "All five check groups passed: soroban, evm, protocol, rehearsal, security."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$failed" ]; then
+            echo "not mergeable:$failed" >&2
+            exit 1
+          fi
+          echo "all required checks passed"

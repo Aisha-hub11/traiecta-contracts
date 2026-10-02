@@ -1,0 +1,102 @@
+name: Security concern that is already public
+description: For public security hygiene only. Vulnerabilities go through the private advisory process instead.
+title: "security: "
+labels:
+  - security
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Stop here if you found a vulnerability
+
+        If what you have could let somebody take funds, block a transfer, mint without a burn,
+        bypass a flow limit, replay a delivery, or get past the timelock, this is the wrong form.
+        Use the private channel:
+
+        **[Open a private security advisory](https://github.com/StellarHyperion/stellarhyperion-contracts/security/advisories/new)**
+
+        It is visible only to the maintainers. No account beyond your GitHub account is needed and
+        it takes about as long as filling in this form would.
+
+        Please do not post a proof of concept in a public issue, a gist, a blog post or a thread
+        first. Hyperion sits in front of money moving between chains, and between a public
+        disclosure and a deployed fix there is a window where the only people who benefit are the
+        ones reading fastest. The timelock on the router means even a fast fix is not instant.
+
+        ## What this form is for
+
+        Security work that is already public, and therefore safe to discuss in the open:
+
+        - A published advisory against a dependency, including one of the committed submodules
+          under `evm/lib`
+        - A pattern in the code that looks dangerous but that you do not have an exploit for, and
+          which is not sensitive to describe
+        - A hardening suggestion: a missing check, a wider than necessary admin power, a default
+          worth changing
+        - Something in the documentation or the scripts that would lead somebody into an unsafe
+          practice, such as putting a key somewhere it can be read
+        - A question about the threat model or about what is in scope
+
+        If you are unsure which side of the line you are on, use the private advisory. Nobody will
+        mind, and it can always be made public afterwards.
+
+  - type: checkboxes
+    id: not-a-vuln
+    attributes:
+      label: Required
+      options:
+        - label: >-
+            This is not an undisclosed vulnerability. Nothing I am about to write gives somebody a
+            way to take funds, block a transfer, or bypass a control, and nothing here needs to
+            stay private.
+          required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of concern
+      options:
+        - A published advisory in a dependency
+        - A published advisory in a committed submodule under evm/lib
+        - A pattern that looks dangerous, with no exploit
+        - A hardening suggestion
+        - Documentation or a script that encourages an unsafe practice
+        - A question about scope or the threat model
+    validations:
+      required: true
+
+  - type: textarea
+    id: detail
+    attributes:
+      label: The concern
+      description: >-
+        Say it plainly. If it is a published advisory, link it and say which dependency and which
+        version range, because the committed lockfiles make that checkable in a minute. If it is a
+        pattern, point at the file and the lines and say what you think could go wrong.
+      placeholder: |
+        RUSTSEC-0000-0000 affects <crate> <range>. soroban/Cargo.lock pins <version>, which is in
+        range. It reaches us through soroban-sdk, so the fix is probably an sdk bump rather than
+        anything here.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: What you think should change
+      description: >-
+        Optional, and valuable. A suggestion that accounts for why the current code is the way it
+        is gets taken seriously faster than one that does not. Several things that look like
+        oversights here are deliberate and have a reason written next to them in a comment, so it
+        is worth reading the comment first.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before you submit
+      options:
+        - label: >-
+            I have read .github/SECURITY.md and know that the rails Hyperion routes over are out
+            of scope. Hyperion hands transfers to CCTP, Axelar and Allbridge; it does not own them
+            and cannot fix them.
+          required: true

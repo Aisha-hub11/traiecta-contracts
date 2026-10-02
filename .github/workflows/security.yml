@@ -1,0 +1,239 @@
+name: security
+
+# Dependency advisories on both package managers, and static analysis on the Solidity.
+#
+# Three separate jobs rather than one, because they fail for unrelated reasons and a reviewer
+# should be able to tell at a glance whether the problem is a published advisory in a Rust
+# dependency, a published advisory in a JavaScript dependency, or something Slither found in code
+# written here. One job would collapse all three into a single red mark.
+#
+# Called by ci.yml, which holds the concurrency group.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FOUNDRY_VERSION: v1.5.1
+  FOUNDRY_DISABLE_NIGHTLY_WARNING: "true"
+  # Pinned. The Slither action defaults to whatever is newest on PyPI, which means a new release
+  # with a new detector can turn this branch gate red on a morning when nobody touched the
+  # contracts. New detectors are welcome; finding out about them on a deadline is not.
+  SLITHER_VERSION: 0.11.6
+
+jobs:
+  cargo-audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - name: Install cargo-audit
+        # A prebuilt binary rather than cargo install, which would spend several minutes compiling
+        # an auditing tool before it audits anything.
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
+        with:
+          tool: cargo-audit
+
+      - name: Audit the committed lockfile
+        # Reads soroban/Cargo.lock, which is committed, so this checks the exact dependency graph
+        # the tests ran against rather than whatever resolves today.
+        #
+        # Deliberately not --deny warnings. cargo-audit counts an unmaintained or yanked crate as a
+        # warning, and most of those here would be transitive dependencies of soroban-sdk that no
+        # pull request to this repository can do anything about. A gate nobody can clear is a gate
+        # somebody eventually disables, and then the vulnerability check goes with it. Published
+        # vulnerabilities fail this step; warnings are printed and show up in the summary for a
+        # human to read.
+        run: |
+          set -o pipefail
+          cargo audit --file soroban/Cargo.lock | tee cargo-audit.txt
+
+      - name: Summarise
+        if: always()
+        run: |
+          set -uo pipefail
+          {
+            echo "### cargo audit"
+            echo
+            if [ -s cargo-audit.txt ]; then
+              echo '```'
+              cat cargo-audit.txt
+              echo '```'
+            else
+              echo "No output. cargo-audit did not run."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - name: Set up node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/protocol/package-lock.json
+
+      - name: Audit the protocol package
+        # Run from inside the package so npm picks up packages/protocol/.npmrc. That file sets
+        # audit=false, which turns off the audit npm runs alongside an install; it does not turn
+        # off the audit command, and this step is the reason the install was allowed to stop
+        # printing audit output in the first place.
+        #
+        # --audit-level=high rather than the default, and this is a judgement rather than a
+        # convenience. Every dependency of this package is a devDependency: the published package
+        # has no runtime dependencies at all, works on Uint8Array and bigint, and the ABI modules
+        # are generated. So an advisory here is an advisory against a build tool on a maintainer's
+        # machine and in this workflow, not against anything a consumer of @hyperion/protocol
+        # installs. High and critical findings in a build tool are still worth stopping for,
+        # because a compromised formatter or test runner can write whatever it likes into dist.
+        # Moderate findings in a linter are not worth blocking a contract fix over.
+        #
+        # evm/package-lock.json holds one devDependency, solhint, and is covered by dependabot
+        # rather than by a gate here. If that package ever grows a second dependency, add it.
+        working-directory: packages/protocol
+        run: |
+          set -o pipefail
+          npm audit --audit-level=high | tee npm-audit.txt
+
+      - name: Summarise
+        if: always()
+        working-directory: packages/protocol
+        run: |
+          set -uo pipefail
+          {
+            echo "### npm audit, packages/protocol"
+            echo
+            echo "Threshold is high. Every dependency here is a build time devDependency; the"
+            echo "published package has no runtime dependencies."
+            echo
+            if [ -s npm-audit.txt ]; then
+              echo '```'
+              cat npm-audit.txt
+              echo '```'
+            else
+              echo "No output."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  slither:
+    name: slither
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out, submodules included
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+          cache: false
+
+      - name: Compile with the pinned toolchain
+        # Compiling here rather than letting the Slither action do it, for two reasons.
+        #
+        # First, the action installs Foundry stable inside its own container, unpinned, so the
+        # artifacts Slither reasons about would come from a different compiler than the one the
+        # test suite and the deployment use. Analysing bytecode nobody is going to ship is a
+        # strange way to spend a branch gate.
+        #
+        # Second, when the action compiles it also runs `forge install` in the target directory.
+        # forge-std and OpenZeppelin are committed submodules here, already at the revisions the
+        # suite was audited against, and letting a container reinstall them is a good way to
+        # analyse something other than what is in the tree.
+        #
+        # --build-info is what crytic-compile reads when it is told not to compile.
+        working-directory: evm
+        run: forge build --build-info
+
+      - name: Slither
+        id: slither
+        uses: crytic/slither-action@b52cc1cbfee9ca3e8722dd5224299d16c9a6b80f # v0.4.2
+        with:
+          target: evm/
+          slither-version: ${{ env.SLITHER_VERSION }}
+          # Read the artifacts built above instead of compiling again. See the step above for why.
+          ignore-compile: true
+          # Medium and high stop the build. Low, informational and optimization findings are
+          # printed and not blocking.
+          #
+          # This is a deliberate line and not a way to go green. The low and informational
+          # detectors fire on things this codebase does on purpose: assembly in the codecs,
+          # unchecked blocks where the bounds were proved by a fuzz test, and solc version
+          # pragmas that are pinned rather than ranged. Blocking on those would mean a wall of
+          # suppressions, and a wall of suppressions is how a team learns to add one more without
+          # reading it. Medium and above is where a finding is usually either a real bug or a real
+          # argument.
+          #
+          # Honest caveat for whoever reads this next: Slither has not yet been run against this
+          # tree, so the first run may well need triage. If it does, the answer is to fix the
+          # finding or to write down next to this comment why it is acceptable. It is not to raise
+          # fail-on.
+          fail-on: medium
+          # lib/ is forge-std and the OpenZeppelin tree. Findings there are upstream's to fix, they
+          # arrive with every submodule bump, and this repository is not the place to triage them.
+          # test/ is mocks and hostile stand ins whose whole job is to behave badly on purpose, so
+          # a finding about reentrancy in HostileCallers is the test working.
+          #
+          # script/ is deliberately NOT filtered. The deploy scripts are the one place in this
+          # repository where a mistake moves real money, and even a weak detector pointed at them
+          # is worth a human glance. If they turn out to be noisy, name the specific detector here
+          # with a reason rather than dropping the directory.
+          slither-args: >-
+            --checklist
+            --markdown-root ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/evm/
+            --filter-paths "lib/|test/"
+
+      - name: Put the checklist in the summary
+        # Always, because a failing Slither run is exactly when somebody wants to read the
+        # findings. The action writes its stdout on an exit trap, so the output survives a
+        # non-zero exit.
+        #
+        # The report goes through the environment rather than being interpolated into the script
+        # body. Its text is derived from repository sources, which on a pull request from a fork
+        # means text a stranger controls, and a stranger's text pasted into a shell script is a
+        # shell injection.
+        if: always()
+        env:
+          REPORT: ${{ steps.slither.outputs.stdout }}
+        run: |
+          set -uo pipefail
+          {
+            echo "### Slither"
+            echo
+            if [ -n "${REPORT:-}" ]; then
+              printf '%s\n' "$REPORT"
+            else
+              echo "Slither produced no report. It probably failed before analysis, which usually"
+              echo "means the build info it was pointed at was missing or unreadable."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
