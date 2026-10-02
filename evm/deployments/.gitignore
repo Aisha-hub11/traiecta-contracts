@@ -1,0 +1,5 @@
+# Deployment records for local and throwaway chains. A record naming anvil addresses is noise in
+# a diff and a trap for anybody who later reads it as authoritative.
+local-*.json
+evm-31337-*.json
+evm-1337-*.json

@@ -41,7 +41,15 @@ fs_permissions = [{access = "read-write", path = "./deployments"}]
 # Hand written assembly instead of `keccak256(abi.encode(...))` saves roughly a hundred gas on a
 # replay key. It also means the one line standing between a message and a second delivery is a
 # line nobody can read at a glance. That is the wrong thing to buy a hundred gas with.
-exclude_lints = ["asm-keccak256"]
+exclude_lints = [
+  "asm-keccak256",
+  # Reading and writing the deployment record is what a deploy script is for. The lint is right
+  # that `readFile` and `writeJson` reach outside the EVM, and `fs_permissions` above is the
+  # answer to that: the only path either one can touch is ./deployments. Silencing it per line
+  # would mean a disable comment on every call in three scripts, which trains people to add the
+  # comment rather than to think about the access.
+  "unsafe-cheatcode",
+]
 
 [profile.default.fuzz]
 runs = 512
