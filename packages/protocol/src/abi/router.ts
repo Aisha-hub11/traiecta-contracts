@@ -525,6 +525,19 @@ export const hyperionRouterAbi = [
   },
   {
     "type": "function",
+    "name": "pauseRoute",
+    "inputs": [
+      {
+        "name": "route",
+        "type": "uint8",
+        "internalType": "enum RouteKind"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "pendingClaim",
     "inputs": [
       {
@@ -1009,6 +1022,25 @@ export const hyperionRouterAbi = [
   },
   {
     "type": "function",
+    "name": "routePaused",
+    "inputs": [
+      {
+        "name": "route",
+        "type": "uint8",
+        "internalType": "enum RouteKind"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "paused",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "settleClaim",
     "inputs": [
       {
@@ -1110,6 +1142,19 @@ export const hyperionRouterAbi = [
     "type": "function",
     "name": "unpause",
     "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "unpauseRoute",
+    "inputs": [
+      {
+        "name": "route",
+        "type": "uint8",
+        "internalType": "enum RouteKind"
+      }
+    ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
@@ -1587,6 +1632,44 @@ export const hyperionRouterAbi = [
   },
   {
     "type": "event",
+    "name": "RoutePaused",
+    "inputs": [
+      {
+        "name": "route",
+        "type": "uint8",
+        "indexed": true,
+        "internalType": "enum RouteKind"
+      },
+      {
+        "name": "caller",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RouteUnpaused",
+    "inputs": [
+      {
+        "name": "route",
+        "type": "uint8",
+        "indexed": true,
+        "internalType": "enum RouteKind"
+      },
+      {
+        "name": "caller",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "TokenRegistered",
     "inputs": [
       {
@@ -1785,6 +1868,17 @@ export const hyperionRouterAbi = [
     "type": "error",
     "name": "RouteDisabled",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "RouteIsPaused",
+    "inputs": [
+      {
+        "name": "route",
+        "type": "uint8",
+        "internalType": "enum RouteKind"
+      }
+    ]
   },
   {
     "type": "error",

@@ -678,6 +678,48 @@ contract RouterAdminTest is Fixture {
         vm.stopPrank();
     }
 
+    function test_the_guardian_can_pause_and_unpause_a_route() public {
+        vm.expectEmit(true, true, true, true, address(router));
+        emit IHyperionRouter.RoutePaused(RouteKind.Cctp, guardian);
+        vm.prank(guardian);
+        router.pauseRoute(RouteKind.Cctp);
+        assertTrue(router.routePaused(RouteKind.Cctp));
+        assertFalse(router.routePaused(RouteKind.AxelarIts));
+
+        vm.expectEmit(true, true, true, true, address(router));
+        emit IHyperionRouter.RouteUnpaused(RouteKind.Cctp, guardian);
+        vm.prank(guardian);
+        router.unpauseRoute(RouteKind.Cctp);
+        assertFalse(router.routePaused(RouteKind.Cctp));
+    }
+
+    function test_the_admin_can_pause_and_unpause_a_route() public {
+        vm.expectEmit(true, true, true, true, address(router));
+        emit IHyperionRouter.RoutePaused(RouteKind.AxelarIts, admin);
+        vm.prank(admin);
+        router.pauseRoute(RouteKind.AxelarIts);
+        assertTrue(router.routePaused(RouteKind.AxelarIts));
+
+        vm.expectEmit(true, true, true, true, address(router));
+        emit IHyperionRouter.RouteUnpaused(RouteKind.AxelarIts, admin);
+        vm.prank(admin);
+        router.unpauseRoute(RouteKind.AxelarIts);
+        assertFalse(router.routePaused(RouteKind.AxelarIts));
+    }
+
+    function test_a_stranger_cannot_pause_or_unpause_a_route() public {
+        vm.prank(stranger);
+        vm.expectRevert(Unauthorized.selector);
+        router.pauseRoute(RouteKind.Cctp);
+
+        vm.prank(guardian);
+        router.pauseRoute(RouteKind.Cctp);
+
+        vm.prank(stranger);
+        vm.expectRevert(Unauthorized.selector);
+        router.unpauseRoute(RouteKind.Cctp);
+    }
+
     function test_the_guardian_can_tighten_a_flow_limit_without_waiting() public {
         vm.expectEmit(true, true, true, true, address(router));
         emit IHyperionRouter.FlowLimitLowered(address(usdc), guardian, 1000e6);

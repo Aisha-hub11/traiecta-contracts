@@ -140,6 +140,16 @@ interface IHyperionRouter {
     /// @param enabled Whether it now accepts departures. Arrivals are never affected.
     event RouteConfigured(RouteKind indexed route, bool enabled);
 
+    /// @notice A rail was paused individually.
+    /// @param route Which rail was paused.
+    /// @param caller Who paused it.
+    event RoutePaused(RouteKind indexed route, address indexed caller);
+
+    /// @notice A rail was unpaused individually.
+    /// @param route Which rail was unpaused.
+    /// @param caller Who unpaused it.
+    event RouteUnpaused(RouteKind indexed route, address indexed caller);
+
     /// @notice The adapter that speaks for a rail was pointed somewhere else.
     /// @param route The rail.
     /// @param adapter Its new adapter, or zero when the rail was unwired.
@@ -249,6 +259,14 @@ interface IHyperionRouter {
     /// @param limit The new ceiling, which has to be below the one in force.
     function lowerTokenFlowLimit(address token, uint256 limit) external;
 
+    /// @notice Pause departures for a single rail without affecting other rails.
+    /// @param route The rail to pause.
+    function pauseRoute(RouteKind route) external;
+
+    /// @notice Resume departures for an individually paused rail.
+    /// @param route The rail to unpause.
+    function unpauseRoute(RouteKind route) external;
+
     /// @notice Read a queued change.
     /// @param id The action to read.
     /// @return The action, its timestamps, and whether it has already been executed.
@@ -274,4 +292,9 @@ interface IHyperionRouter {
     /// @param route The rail to read.
     /// @return Its adapter, or the zero address when the rail has not been wired up.
     function adapter(RouteKind route) external view returns (address);
+
+    /// @notice Whether an individual rail is currently paused for departures.
+    /// @param route The rail to check.
+    /// @return True if the rail is paused.
+    function routePaused(RouteKind route) external view returns (bool);
 }

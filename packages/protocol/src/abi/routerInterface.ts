@@ -219,6 +219,19 @@ export const hyperionRouterInterfaceAbi = [
   },
   {
     "type": "function",
+    "name": "pauseRoute",
+    "inputs": [
+      {
+        "name": "route",
+        "type": "uint8",
+        "internalType": "enum RouteKind"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "pendingClaim",
     "inputs": [
       {
@@ -610,6 +623,25 @@ export const hyperionRouterInterfaceAbi = [
   },
   {
     "type": "function",
+    "name": "routePaused",
+    "inputs": [
+      {
+        "name": "route",
+        "type": "uint8",
+        "internalType": "enum RouteKind"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "settleClaim",
     "inputs": [
       {
@@ -661,6 +693,19 @@ export const hyperionRouterInterfaceAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "unpauseRoute",
+    "inputs": [
+      {
+        "name": "route",
+        "type": "uint8",
+        "internalType": "enum RouteKind"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "event",
@@ -1042,6 +1087,44 @@ export const hyperionRouterInterfaceAbi = [
         "type": "bool",
         "indexed": false,
         "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RoutePaused",
+    "inputs": [
+      {
+        "name": "route",
+        "type": "uint8",
+        "indexed": true,
+        "internalType": "enum RouteKind"
+      },
+      {
+        "name": "caller",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RouteUnpaused",
+    "inputs": [
+      {
+        "name": "route",
+        "type": "uint8",
+        "indexed": true,
+        "internalType": "enum RouteKind"
+      },
+      {
+        "name": "caller",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       }
     ],
     "anonymous": false

@@ -10,6 +10,7 @@ import {
     MuxedNotSupported,
     RefundFailed,
     RouteDisabled,
+    RouteIsPaused,
     SlippageExceeded,
     TokenDisabled,
     TokenNotRegistered,
@@ -307,6 +308,20 @@ contract RouterOutboundTest is Fixture {
         vm.prank(alice);
         vm.expectRevert(Pausable.EnforcedPause.selector);
         router.bridgeOut(_usdcRequest(1000e6));
+    }
+
+    function test_a_paused_route_is_refused_while_other_routes_work() public {
+        vm.prank(guardian);
+        router.pauseRoute(RouteKind.Cctp);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(RouteIsPaused.selector, RouteKind.Cctp));
+        router.bridgeOut(_usdcRequest(1000e6));
+
+        // Other routes remain functional
+        vm.prank(alice);
+        uint64 nonce = router.bridgeOut(_itsRequest(1000e6));
+        assertEq(nonce, 1);
     }
 
     function test_a_rail_that_reverts_takes_the_whole_transfer_with_it() public {

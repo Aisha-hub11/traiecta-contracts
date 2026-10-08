@@ -77,6 +77,7 @@ export const EVM_ERROR_NAMES = [
   "Unauthorized",
   "NotRailReceiver",
   "RouteDisabled",
+  "RouteIsPaused",
   "AdapterNotSet",
   "InvalidAmount",
   "AmountNotRepresentable",
@@ -181,6 +182,11 @@ const HELP: Record<HyperionErrorName, Omit<ErrorHelp, "sorobanCode">> = {
   RouteDisabled: {
     summary: "That rail is switched off right now. Pick another one.",
     fault: "config",
+    retryable: true,
+  },
+  RouteIsPaused: {
+    summary: "That rail is temporarily paused. Pick another one.",
+    fault: "timing",
     retryable: true,
   },
   AdapterNotSet: {
