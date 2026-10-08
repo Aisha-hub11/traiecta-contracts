@@ -191,7 +191,10 @@ fn negative_amounts_consistently_rejected() {
     for &val in &negatives {
         for &from in &SUPPORTED_DECIMALS {
             for &to in &SUPPORTED_DECIMALS {
-                assert_eq!(scale_amount(val, from, to), Err(HyperionError::InvalidAmount));
+                assert_eq!(
+                    scale_amount(val, from, to),
+                    Err(HyperionError::InvalidAmount)
+                );
             }
         }
     }
