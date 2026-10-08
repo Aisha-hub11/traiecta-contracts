@@ -14,7 +14,14 @@ import {
   UBIQUITOUS,
   railContracts,
 } from "../src/registry/contracts.js";
-import { CHAIN_KEYS, chain, isEvmChain, isStellarChain } from "../src/chains.js";
+import {
+  CHAIN_KEYS,
+  CHAIN_REGISTRY,
+  chain,
+  chainKeyFromId,
+  isEvmChain,
+  isStellarChain,
+} from "../src/chains.js";
 import { RouteKind } from "../src/routes.js";
 import { isStellarAddress } from "../src/addresses.js";
 
@@ -257,5 +264,30 @@ describe("the rail contracts", () => {
     expect(IRIS_API.mainnet).toBe("https://iris-api.circle.com");
     expect(IRIS_API.testnet).toBe("https://iris-api-sandbox.circle.com");
     expect(CIRCLE_FAUCET_URL.startsWith("https://")).toBe(true);
+  });
+});
+
+describe("the local chain descriptor in the registry", () => {
+  it("includes a local chain configuration in CHAIN_REGISTRY with chain ID 31337", () => {
+    expect(CHAIN_REGISTRY.local).toBeDefined();
+    expect(CHAIN_REGISTRY.local.key).toBe("local");
+    const local = CHAIN_REGISTRY.local;
+    if (isEvmChain(local)) {
+      expect(local.chainId).toBe(31_337);
+      expect(local.nativeCurrency.symbol).toBe("ETH");
+      expect(local.nativeCurrency.name).toBe("Ether");
+      expect(local.nativeCurrency.decimals).toBe(18);
+      expect(local.confirmations).toBe(1);
+      expect(local.blockSeconds).toBe(1);
+      expect(local.explorer.baseUrl).toBe("https://localhost:8545");
+    }
+  });
+
+  it("resolves local chainKeyFromId for 31337 and 1337 alias", () => {
+    expect(chainKeyFromId(31_337)).toBe("local");
+    expect(chainKeyFromId(1337)).toBe("local");
+    expect(chainKeyFromId(1)).toBe("ethereum");
+    expect(chainKeyFromId(8453)).toBe("base");
+    expect(chainKeyFromId(999_999)).toBeNull();
   });
 });
