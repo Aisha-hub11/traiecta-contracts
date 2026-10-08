@@ -14,6 +14,18 @@ does. There is no validator set here, no multisig signing messages, no light cli
 instead is a lot of arithmetic that has to be exactly right, four rails that each behave slightly
 differently, and three implementations of the same wire formats that have to agree.
 
+## Organization overview
+
+The StellarHyperion organization divides cross-chain routing across three dedicated repositories:
+
+| Repository | Purpose | Core Technologies |
+|---|---|---|
+| `stellarhyperion-contracts` | On-chain routers, adapters, and shared protocol SDK | Soroban (Rust), EVM (Solidity, Foundry), TypeScript |
+| `stellarhyperion-backend` | Event indexer, rail pollers, keeper upkeep, and REST API | Fastify, Postgres, Redis, BullMQ, viem, stellar-sdk |
+| `stellarhyperion-frontend` | User interface, live switchyard, and transfer tracker | Next.js 16, React 19, CSS modules, wagmi, Stellar Wallets Kit |
+
+Each repository maintains independent continuous integration, dependency definitions, and issue governance while sharing protocol constants and wire codecs from `@hyperion/protocol`.
+
 ## What is in the box
 
 ```
