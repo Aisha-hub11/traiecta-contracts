@@ -3,9 +3,7 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 
-import {InvalidDestination, ZeroAddressKey} from "../../src/HyperionErrors.sol";
 import {AddressKind} from "../../src/HyperionTypes.sol";
-import {StellarAddress} from "../../src/libraries/StellarAddress.sol";
 import {StellarAddressHarness} from "../harness/LibHarness.sol";
 
 /// @title Property fuzz testing for StellarAddress StrKey checksum mutations
@@ -92,7 +90,7 @@ contract StellarAddressFuzzTest is Test {
         uint8 bitPos = uint8(bound(mutateBitIndex, 0, 7));
 
         // Flip exactly one bit in the chosen character
-        chars[bytePos] ^= bytes1(uint8(1 << bitPos));
+        chars[bytePos] ^= bytes1(uint8(2 ** bitPos));
 
         string memory corrupted = string(chars);
 
@@ -109,20 +107,24 @@ contract StellarAddressFuzzTest is Test {
     ) internal {
         // Build raw 35-byte binary: [version (1 byte)][key (32 bytes)][crc16 (2 bytes little-endian)]
         bytes memory raw = new bytes(RAW_LEN_PLAIN);
-        raw[0] = kind == AddressKind.Account ? bytes1(uint8(6 << 3)) : bytes1(uint8(2 << 3));
+        raw[0] = kind == AddressKind.Account ? bytes1(uint8(6 * 8)) : bytes1(uint8(2 * 8));
 
         for (uint256 i = 0; i < 32; ++i) {
             raw[1 + i] = rawKey[i];
         }
 
         uint16 crc = strkey.checksum(raw, BODY_LEN_PLAIN);
+        // casting to 'uint8' is safe because crc is 16 bits and we extract the low byte
+        // forge-lint: disable-next-line(unsafe-typecast)
         raw[33] = bytes1(uint8(crc));
+        // casting to 'uint8' is safe because crc is 16 bits and we extract the high byte
+        // forge-lint: disable-next-line(unsafe-typecast)
         raw[34] = bytes1(uint8(crc >> 8));
 
         // Corrupt any byte from index 1 to 34 (payload or checksum), flipping 1 bit
         uint256 bytePos = bound(mutateByteIndex, 1, RAW_LEN_PLAIN - 1);
         uint8 bitPos = uint8(bound(mutateBitIndex, 0, 7));
-        raw[bytePos] ^= bytes1(uint8(1 << bitPos));
+        raw[bytePos] ^= bytes1(uint8(2 ** bitPos));
 
         // If the corrupted key became all zeros, it should revert with ZeroAddressKey
         // Otherwise it should revert with InvalidDestination (CRC mismatch)
@@ -147,7 +149,7 @@ contract StellarAddressFuzzTest is Test {
                 pending -= 5;
                 out[written++] = alphabet[(accumulator >> pending) & 0x1F];
             }
-            accumulator &= (1 << pending) - 1;
+            accumulator &= (2 ** pending) - 1;
         }
         if (pending > 0) {
             out[written++] = alphabet[(accumulator << (5 - pending)) & 0x1F];
