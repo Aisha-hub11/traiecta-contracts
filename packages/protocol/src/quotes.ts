@@ -319,3 +319,12 @@ export function minimumFromTolerance(quote: RouteQuote, toleranceBps: number): b
   const keep = BPS_DENOMINATOR - BigInt(toleranceBps);
   return (quote.destinationAmount * keep) / BPS_DENOMINATOR;
 }
+
+/** Convenience alias for single rail quote planning. */
+export const quoteRoute = planQuote;
+
+/** Convenience alias for all rail quote planning. */
+export const quoteAllRails = planQuotes;
+
+export * from "./quotes/types.js";
+export * from "./quotes/ladder.js";

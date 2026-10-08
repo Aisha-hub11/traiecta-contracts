@@ -84,6 +84,12 @@ pub fn convert_decimals_exact(amount: i128, from: u32, to: u32) -> Result<i128, 
     Ok(converted.amount)
 }
 
+/// Convenience helper to scale an amount from a `from`-decimal base into a `to`-decimal base,
+/// returning the converted destination amount.
+pub fn scale_amount(amount: i128, from: u32, to: u32) -> Result<i128, HyperionError> {
+    convert_decimals(amount, from, to).map(|c| c.amount)
+}
+
 /// Round `amount` down to the nearest value that survives a `from` to `to` conversion intact.
 ///
 /// This is what the SDK calls to turn "send everything I have" into a number the router will
