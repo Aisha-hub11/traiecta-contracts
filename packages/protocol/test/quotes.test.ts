@@ -8,9 +8,13 @@ import {
   minimumFromTolerance,
   planQuote,
   planQuotes,
+  quoteBatch,
+  quoteRoute,
+  quoteAllRails,
+  RAIL_DESTINATION_GAS_ESTIMATES,
   wouldSlip,
 } from "../src/quotes.js";
-import type { RouterSnapshot } from "../src/quotes.js";
+import type { QuoteParams, RouterSnapshot } from "../src/quotes.js";
 import { ROUTE_KINDS, RouteKind } from "../src/routes.js";
 import { G_ADDR, M_ADDR } from "./fixtures.js";
 
@@ -294,5 +298,128 @@ describe("slippage, which the quote deliberately knows nothing about", () => {
     const quote = planQuote({ ...request, route: RouteKind.Cctp }, snapshot());
     expect(() => minimumFromTolerance(quote, -1)).toThrow(RangeError);
     expect(() => minimumFromTolerance(quote, 10_001)).toThrow(RangeError);
+  });
+});
+
+describe("batch quote simulation with gas projections (quoteBatch)", () => {
+  const tiers = [100_000_000n, 500_000_000n, 1_000_000_000n] as const;
+  const batchParams: QuoteParams = {
+    strkey: G_ADDR,
+    destinationDecimals: 7,
+    snapshot: snapshot(),
+  };
+
+  it("calculates quotes across multiple tiers with parity to planQuote", () => {
+    const results = quoteBatch(tiers, batchParams);
+    expect(results.length).toBe(tiers.length);
+
+    for (let i = 0; i < tiers.length; i++) {
+      const result = results[i]!;
+      const tier = tiers[i]!;
+      expect(result.amount).toBe(tier);
+      expect(result.available).toBe(true);
+      expect(result.winningRail).toBe(RouteKind.Cctp);
+
+      // Verify parity with planQuotes and bestQuote
+      const individualQuotes = planQuotes(
+        { amount: tier, strkey: G_ADDR, destinationDecimals: 7 },
+        snapshot(),
+      );
+      const expectedBest = bestQuote(individualQuotes);
+      expect(result.bestQuote).toEqual(expectedBest);
+      expect(result.fee).toBe(expectedBest?.fee);
+      expect(result.netAmount).toBe(expectedBest?.netAmount);
+      expect(result.destinationAmount).toBe(expectedBest?.destinationAmount);
+      expect(result.grossAmount).toBe(expectedBest?.grossAmount);
+    }
+  });
+
+  it("projects estimated destination gas for the winning rail and all rails", () => {
+    const results = quoteBatch([100_000_000n], batchParams);
+    const result = results[0]!;
+
+    expect(result.winningRail).toBe(RouteKind.Cctp);
+    expect(result.estimatedDestinationGas).toBe(RAIL_DESTINATION_GAS_ESTIMATES[RouteKind.Cctp]);
+    expect(result.gasProjections[RouteKind.Cctp]).toBe(65_000n);
+    expect(result.gasProjections[RouteKind.AxelarIts]).toBe(150_000n);
+    expect(result.gasProjections[RouteKind.AxelarGmp]).toBe(200_000n);
+    expect(result.gasProjections[RouteKind.Allbridge]).toBe(120_000n);
+  });
+
+  it("allows overriding destination gas estimates per rail", () => {
+    const customGas = { [RouteKind.Cctp]: 80_000n };
+    const results = quoteBatch([100_000_000n], {
+      ...batchParams,
+      gasEstimates: customGas,
+    });
+    expect(results[0]!.estimatedDestinationGas).toBe(80_000n);
+    expect(results[0]!.gasProjections[RouteKind.Cctp]).toBe(80_000n);
+  });
+
+  it("returns available: false and null winning rail when router is paused", () => {
+    const results = quoteBatch(tiers, {
+      ...batchParams,
+      snapshot: snapshot({ paused: true }),
+    });
+
+    for (const res of results) {
+      expect(res.available).toBe(false);
+      expect(res.winningRail).toBeNull();
+      expect(res.bestQuote).toBeNull();
+      expect(res.estimatedDestinationGas).toBeNull();
+      expect(res.destinationAmount).toBe(0n);
+      for (const q of res.quotes) {
+        expect(q.reason).toBe(QuoteBlocker.Paused);
+      }
+    }
+  });
+
+  it("handles headroom exhaustion across ascending tiers", () => {
+    // Set flow limit to 200 USDC (200_000_000n)
+    const tightSnapshot = snapshot({
+      flowAvailable: {
+        [RouteKind.Cctp]: 200_000_000n,
+        [RouteKind.AxelarIts]: 200_000_000n,
+        [RouteKind.AxelarGmp]: 200_000_000n,
+        [RouteKind.Allbridge]: 200_000_000n,
+      },
+    });
+
+    const results = quoteBatch([100_000_000n, 500_000_000n], {
+      ...batchParams,
+      snapshot: tightSnapshot,
+    });
+
+    const first = results[0]!;
+    const second = results[1]!;
+
+    // Tier 1 (100 USDC) is under 200 USDC -> available
+    expect(first.available).toBe(true);
+    // Tier 2 (500 USDC) exceeds 200 USDC -> blocked
+    expect(second.available).toBe(false);
+    expect(second.winningRail).toBeNull();
+    for (const q of second.quotes) {
+      expect(q.reason).toBe(QuoteBlocker.FlowLimitExceeded);
+    }
+  });
+
+  it("handles empty tier array cleanly", () => {
+    const results = quoteBatch([], batchParams);
+    expect(results).toEqual([]);
+  });
+
+  it("handles negative or excessive tier amounts without throwing", () => {
+    const weirdTiers = [-1n, 0n, MAX_QUOTE_AMOUNT + 1n];
+    const results = quoteBatch(weirdTiers, batchParams);
+    expect(results.length).toBe(3);
+    for (const res of results) {
+      expect(res.available).toBe(false);
+      expect(res.winningRail).toBeNull();
+    }
+  });
+
+  it("exports convenience aliases quoteRoute and quoteAllRails", () => {
+    expect(quoteRoute).toBe(planQuote);
+    expect(quoteAllRails).toBe(planQuotes);
   });
 });
