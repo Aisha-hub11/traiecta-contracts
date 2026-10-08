@@ -25,6 +25,7 @@ import {
     RefundFailed,
     ReplayedMessage,
     RouteDisabled,
+    RouteIsPaused,
     SlippageExceeded,
     TimelockAlreadyExecuted,
     TimelockDelayOutOfRange,
@@ -127,6 +128,8 @@ contract HyperionRouter is IHyperionRouter, AccessControl, Pausable, ReentrancyG
     /// @notice Whether a rail is open for new transfers. Deliveries already in flight are not
     /// affected, because a transfer that has left is a transfer that has to be able to land.
     mapping(RouteKind route => bool enabled) public routeEnabled;
+    /// @notice Whether an individual rail is currently paused for departures.
+    mapping(RouteKind route => bool paused) public routePaused;
     mapping(address token => TokenConfig config) private _tokens;
 
     /// @dev Keyed on token and rail together, because a ceiling that makes sense for the rail
@@ -242,6 +245,7 @@ contract HyperionRouter is IHyperionRouter, AccessControl, Pausable, ReentrancyG
     /// transactions in the same block both pass.
     function _planOutbound(OutboundRequest calldata request) private returns (OutboundPlan memory plan) {
         if (request.amount == 0) revert InvalidAmount();
+        if (routePaused[request.route]) revert RouteIsPaused(request.route);
         if (!routeEnabled[request.route]) revert RouteDisabled();
         if (bytes(request.destination.chain).length == 0) revert UnknownChain();
 
@@ -374,7 +378,7 @@ contract HyperionRouter is IHyperionRouter, AccessControl, Pausable, ReentrancyG
         view
         returns (QuoteBlocker)
     {
-        if (paused()) return QuoteBlocker.Paused;
+        if (paused() || routePaused[route]) return QuoteBlocker.Paused;
         if (!routeEnabled[route]) return QuoteBlocker.RouteDisabled;
 
         address adapterAddress = _adapters[route];
@@ -504,6 +508,26 @@ contract HyperionRouter is IHyperionRouter, AccessControl, Pausable, ReentrancyG
     /// morning by somebody who wants the alert to go away.
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
+    }
+
+    /// @inheritdoc IHyperionRouter
+    /// @dev Guardian or admin. Other rails and arrivals keep working.
+    function pauseRoute(RouteKind route) external {
+        if (!hasRole(GUARDIAN_ROLE, msg.sender) && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
+            revert Unauthorized();
+        }
+        routePaused[route] = true;
+        emit RoutePaused(route, msg.sender);
+    }
+
+    /// @inheritdoc IHyperionRouter
+    /// @dev Guardian or admin.
+    function unpauseRoute(RouteKind route) external {
+        if (!hasRole(GUARDIAN_ROLE, msg.sender) && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
+            revert Unauthorized();
+        }
+        routePaused[route] = false;
+        emit RouteUnpaused(route, msg.sender);
     }
 
     /// @inheritdoc IHyperionRouter

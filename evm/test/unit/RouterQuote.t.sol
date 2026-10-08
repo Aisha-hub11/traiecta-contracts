@@ -113,6 +113,18 @@ contract RouterQuoteTest is Fixture {
         _refused(QuoteBlocker.Paused, RouteKind.Cctp, address(usdc), AMOUNT, G_ADDR, 7);
     }
 
+    function test_blocker_route_paused() public {
+        vm.prank(guardian);
+        router.pauseRoute(RouteKind.Cctp);
+        _refused(QuoteBlocker.Paused, RouteKind.Cctp, address(usdc), AMOUNT, G_ADDR, 7);
+
+        // Other routes remain unaffected in quoteAll
+        RouteQuote[] memory quotes = router.quoteAll(address(usdc), AMOUNT, _dest(G_ADDR), 7);
+        assertFalse(quotes[0].available);
+        assertEq(uint8(quotes[0].reason), uint8(QuoteBlocker.Paused));
+        assertTrue(quotes[1].available);
+    }
+
     function test_blocker_route_disabled() public {
         _enableRoute(RouteKind.Cctp, false);
         _refused(QuoteBlocker.RouteDisabled, RouteKind.Cctp, address(usdc), AMOUNT, G_ADDR, 7);
