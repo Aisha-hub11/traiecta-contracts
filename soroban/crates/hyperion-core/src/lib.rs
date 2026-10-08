@@ -18,7 +18,10 @@ pub mod route;
 pub mod strkey;
 
 pub use address::{AddressKind, StellarDestination};
-pub use amount::{Conversion, FeeSplit};
+pub use amount::{
+    convert_decimals, convert_decimals_exact, floor_to_representable, scale_amount, Conversion,
+    FeeSplit,
+};
 pub use axelar::{InboundNote, OutboundNote};
 pub use cctp::{BurnMessage, CctpMessage, HyperionHook};
 pub use error::HyperionError;
