@@ -27,6 +27,7 @@ import {DeafRouter} from "../mocks/HostileCallers.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 import {MockGasService} from "../mocks/MockGasService.sol";
 import {MockIts} from "../mocks/MockIts.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /// @title The rail that goes both ways
 /// @notice Sending over ITS, receiving over ITS, and the one comparison that separates a delivery
@@ -426,6 +427,21 @@ contract AxelarItsAdapterTest is Fixture {
 
         vm.prank(address(router));
         adapter.dispatch{value: 0.2 ether}(address(usdc), AMOUNT, _dest(G_ADDR), NONCE);
+    }
+
+    function test_dispatch_emits_event_before_external_calls() public {
+        _fund(AMOUNT);
+        vm.deal(address(router), 1 ether);
+        vm.recordLogs();
+        vm.prank(address(router));
+        adapter.dispatch{value: 0.2 ether}(address(usdc), AMOUNT, _dest(G_ADDR), NONCE);
+
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        assertTrue(entries.length > 0);
+        assertEq(entries[0].emitter, address(adapter));
+        assertEq(
+            entries[0].topics[0], keccak256("TransferSubmitted(string,bytes32,uint256,uint64,uint256,bytes)")
+        );
     }
 
     /// @dev ITS writes the gateway log that identifies the delivery, in this same transaction.

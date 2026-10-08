@@ -168,6 +168,8 @@ contract AxelarItsAdapter is IRailAdapter, IInterchainTokenExecutable, Ownable2S
         (AddressKind kind,,) = StellarAddress.parse(destination.strkey);
         bytes memory note = HyperionNotes.encodeInboundNote(kind, destination.strkey, nonce);
 
+        emit TransferSubmitted(destination.chain, tokenId, amount, nonce, msg.value, note);
+
         IERC20(token).forceApprove(address(ITS), amount);
         ITS.interchainTransfer{value: msg.value}(
             tokenId,
@@ -177,8 +179,6 @@ contract AxelarItsAdapter is IRailAdapter, IInterchainTokenExecutable, Ownable2S
             abi.encodePacked(METADATA_CONTRACT_CALL, note),
             msg.value
         );
-
-        emit TransferSubmitted(destination.chain, tokenId, amount, nonce, msg.value, note);
 
         // ITS refunds what the destination gas market did not want, and none of it is this
         // contract's to keep.

@@ -21,6 +21,7 @@ import {Fixture} from "../Fixture.sol";
 import {DeafRouter} from "../mocks/HostileCallers.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 import {MockTokenMessenger} from "../mocks/MockTokenMessenger.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /// @title Handing USDC to Circle
 /// @notice What the adapter tells CCTP, and everything it refuses to tell it.
@@ -387,6 +388,18 @@ contract CctpAdapterTest is Fixture {
         );
         vm.prank(address(router));
         adapter.dispatch(address(usdc), AMOUNT, _dest(G_ADDR), NONCE);
+    }
+
+    function test_dispatch_emits_event_before_external_calls() public {
+        _fund(AMOUNT);
+        vm.recordLogs();
+        vm.prank(address(router));
+        adapter.dispatch(address(usdc), AMOUNT, _dest(G_ADDR), NONCE);
+
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        assertTrue(entries.length > 0);
+        assertEq(entries[0].emitter, address(adapter));
+        assertEq(entries[0].topics[0], keccak256("BurnSubmitted(string,uint32,uint256,bytes32,uint64,bytes)"));
     }
 
     /// @dev Zero, because Circle hands back nothing at burn time. A made up handle would resolve

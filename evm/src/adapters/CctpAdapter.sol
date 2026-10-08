@@ -125,6 +125,8 @@ contract CctpAdapter is IRailAdapter, Ownable2Step {
         (AddressKind kind, bytes32 key, uint64 muxedId) = StellarAddress.parse(destination.strkey);
         bytes memory hookData = HyperionNotes.encodeCctpHook(kind, key, muxedId);
 
+        emit BurnSubmitted(destination.chain, lane.domain, amount, lane.mintRecipient, nonce, hookData);
+
         IERC20(USDC).forceApprove(address(TOKEN_MESSENGER), amount);
         TOKEN_MESSENGER.depositForBurnWithHook(
             amount,
@@ -141,8 +143,6 @@ contract CctpAdapter is IRailAdapter, Ownable2Step {
             FINALITY_THRESHOLD_FINALIZED,
             hookData
         );
-
-        emit BurnSubmitted(destination.chain, lane.domain, amount, lane.mintRecipient, nonce, hookData);
 
         // CCTP wanted no native currency, so none of it is this contract's to keep.
         _refund();
