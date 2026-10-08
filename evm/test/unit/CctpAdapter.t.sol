@@ -399,7 +399,8 @@ contract CctpAdapterTest is Fixture {
         Vm.Log[] memory entries = vm.getRecordedLogs();
         assertTrue(entries.length > 0);
         assertEq(entries[0].emitter, address(adapter));
-        assertEq(entries[0].topics[0], keccak256("BurnSubmitted(string,uint32,uint256,bytes32,uint64,bytes)"));
+        bytes32 expectedTopic = keccak256("BurnSubmitted(string,uint32,uint256,bytes32,uint64,bytes)");
+        assertEq(entries[0].topics[0], expectedTopic);
     }
 
     /// @dev Zero, because Circle hands back nothing at burn time. A made up handle would resolve

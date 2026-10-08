@@ -439,9 +439,8 @@ contract AxelarItsAdapterTest is Fixture {
         Vm.Log[] memory entries = vm.getRecordedLogs();
         assertTrue(entries.length > 0);
         assertEq(entries[0].emitter, address(adapter));
-        assertEq(
-            entries[0].topics[0], keccak256("TransferSubmitted(string,bytes32,uint256,uint64,uint256,bytes)")
-        );
+        bytes32 expectedTopic = keccak256("TransferSubmitted(string,bytes32,uint256,uint64,uint256,bytes)");
+        assertEq(entries[0].topics[0], expectedTopic);
     }
 
     /// @dev ITS writes the gateway log that identifies the delivery, in this same transaction.
