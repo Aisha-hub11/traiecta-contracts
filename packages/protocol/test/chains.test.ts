@@ -53,9 +53,15 @@ describe("the registry as a whole", () => {
 
   it("uses https everywhere, because an rpc url over http is a downgrade attack", () => {
     for (const key of CHAIN_KEYS) {
+      if (key === "local") continue;
       const entry = chain(key);
       expect(entry.defaultRpcUrl.startsWith("https://")).toBe(true);
     }
+  });
+
+  it("uses http on local chain for local development", () => {
+    const entry = chain("local");
+    expect(entry.defaultRpcUrl.startsWith("http://")).toBe(true);
   });
 
   it("recognises its own keys and nothing else", () => {
@@ -122,6 +128,8 @@ describe("chain ids", () => {
     expect(chainByEvmId(1)?.key).toBe("ethereum");
     expect(chainByEvmId(8453)?.key).toBe("base");
     expect(chainByEvmId(84_532)?.key).toBe("base-sepolia");
+    expect(chainByEvmId(31_337)?.key).toBe("local");
+    expect(chainByEvmId(1337)?.key).toBe("local");
     expect(chainByEvmId(999_999)).toBeNull();
   });
 });

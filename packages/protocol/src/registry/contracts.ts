@@ -245,6 +245,14 @@ export const RAIL_CONTRACTS: Readonly<Partial<Record<ChainKey, RailContracts>>> 
     source: AXELAR_SOURCE,
     confirmed: true,
   },
+  local: {
+    cctp: CCTP_V2_TESTNET,
+    gateway: null,
+    axelar: null,
+    common: UBIQUITOUS,
+    source: "local rehearsal node",
+    confirmed: false,
+  },
 };
 
 export function railContracts(key: ChainKey): RailContracts | null {

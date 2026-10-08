@@ -31,7 +31,8 @@ export type ChainKey =
   | "base"
   | "base-sepolia"
   | "arc"
-  | "arc-testnet";
+  | "arc-testnet"
+  | "local";
 
 interface ChainBase {
   readonly key: ChainKey;
@@ -327,6 +328,36 @@ const ARC_TESTNET: EvmChain = {
   },
 };
 
+/**
+ * Local EVM rehearsal node (Anvil or Hardhat).
+ *
+ * Ephemeral node for end to end rehearsals and tests, answering chain id 31337 (Anvil)
+ * or 1337 (Hardhat).
+ */
+const LOCAL: EvmChain = {
+  key: "local",
+  family: "evm",
+  network: "testnet",
+  name: "Local Anvil",
+  shortName: "Local",
+  chainId: 31_337,
+  cctpDomain: null,
+  axelarName: null,
+  defaultRpcUrl: "http://127.0.0.1:8545",
+  defaultWsUrl: "ws://127.0.0.1:8545",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  blockSeconds: 1,
+  confirmations: 1,
+  quirks: ["Ephemeral local node, funded with well known test keys and instant finality."],
+  explorer: {
+    name: "Local Explorer",
+    baseUrl: "https://localhost:8545",
+    txPath: "/tx/{value}",
+    addressPath: "/address/{value}",
+    contractPath: null,
+  },
+};
+
 export const CHAINS: Readonly<Record<ChainKey, Chain>> = {
   stellar: STELLAR_MAINNET,
   "stellar-testnet": STELLAR_TESTNET,
@@ -336,7 +367,10 @@ export const CHAINS: Readonly<Record<ChainKey, Chain>> = {
   "base-sepolia": BASE_SEPOLIA,
   arc: ARC,
   "arc-testnet": ARC_TESTNET,
+  local: LOCAL,
 };
+
+export const CHAIN_REGISTRY: Readonly<Record<ChainKey, Chain>> = CHAINS;
 
 export const CHAIN_KEYS: readonly ChainKey[] = Object.keys(CHAINS) as ChainKey[];
 
@@ -347,6 +381,7 @@ export const TESTNET_CHAINS: readonly ChainKey[] = [
   "sepolia",
   "base-sepolia",
   "arc-testnet",
+  "local",
 ];
 
 export function isChainKey(value: string): value is ChainKey {
@@ -406,7 +441,16 @@ export function chainByEvmId(chainId: number): EvmChain | null {
     const value = CHAINS[key];
     if (isEvmChain(value) && value.chainId === chainId) return value;
   }
+  if (chainId === 1337) return LOCAL;
   return null;
+}
+
+/**
+ * Look up a chain key by its EVM chain id (or recognized alias).
+ */
+export function chainKeyFromId(chainId: number): ChainKey | null {
+  if (chainId === 31_337 || chainId === 1337) return "local";
+  return chainByEvmId(chainId)?.key ?? null;
 }
 
 /** A chain by its CCTP domain, which is what an inbound rail message names it by. */
