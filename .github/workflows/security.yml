@@ -158,82 +158,54 @@ jobs:
           version: ${{ env.FOUNDRY_VERSION }}
           cache: false
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Slither
+        run: pip install slither-analyzer==${{ env.SLITHER_VERSION }}
+
       - name: Compile with the pinned toolchain
-        # Compiling here rather than letting the Slither action do it, for two reasons.
+        # Compiling here rather than letting Slither do it without build-info.
         #
-        # First, the action installs Foundry stable inside its own container, unpinned, so the
-        # artifacts Slither reasons about would come from a different compiler than the one the
-        # test suite and the deployment use. Analysing bytecode nobody is going to ship is a
-        # strange way to spend a branch gate.
+        # First, forge-std and OpenZeppelin are committed submodules here, already at the revisions the
+        # suite was audited against.
         #
-        # Second, when the action compiles it also runs `forge install` in the target directory.
-        # forge-std and OpenZeppelin are committed submodules here, already at the revisions the
-        # suite was audited against, and letting a container reinstall them is a good way to
-        # analyse something other than what is in the tree.
-        #
-        # --build-info is what crytic-compile reads when it is told not to compile.
+        # --build-info is what crytic-compile reads when analysing.
         working-directory: evm
         run: forge build --build-info
 
       - name: Slither
         id: slither
-        uses: crytic/slither-action@b52cc1cbfee9ca3e8722dd5224299d16c9a6b80f # v0.4.2
-        with:
-          target: evm/
-          slither-version: ${{ env.SLITHER_VERSION }}
-          # Read the artifacts built above instead of compiling again. See the step above for why.
-          ignore-compile: true
-          # Medium and high stop the build. Low, informational and optimization findings are
-          # printed and not blocking.
-          #
-          # This is a deliberate line and not a way to go green. The low and informational
-          # detectors fire on things this codebase does on purpose: assembly in the codecs,
-          # unchecked blocks where the bounds were proved by a fuzz test, and solc version
-          # pragmas that are pinned rather than ranged. Blocking on those would mean a wall of
-          # suppressions, and a wall of suppressions is how a team learns to add one more without
-          # reading it. Medium and above is where a finding is usually either a real bug or a real
-          # argument.
-          #
-          # Honest caveat for whoever reads this next: Slither has not yet been run against this
-          # tree, so the first run may well need triage. If it does, the answer is to fix the
-          # finding or to write down next to this comment why it is acceptable. It is not to raise
-          # fail-on.
-          fail-on: medium
-          # lib/ is forge-std and the OpenZeppelin tree. Findings there are upstream's to fix, they
-          # arrive with every submodule bump, and this repository is not the place to triage them.
-          # test/ is mocks and hostile stand ins whose whole job is to behave badly on purpose, so
-          # a finding about reentrancy in HostileCallers is the test working.
-          #
-          # script/ is deliberately NOT filtered. The deploy scripts are the one place in this
-          # repository where a mistake moves real money, and even a weak detector pointed at them
-          # is worth a human glance. If they turn out to be noisy, name the specific detector here
-          # with a reason rather than dropping the directory.
-          slither-args: >-
-            --checklist
-            --markdown-root ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/evm/
-            --filter-paths "lib/|test/"
+        working-directory: evm
+        # Medium and high stop the build. Low, informational and optimization findings are
+        # printed and not blocking.
+        #
+        # Excluded detectors triaged for Hyperion EVM contracts:
+        # - arbitrary-send-eth: false positive on Axelar/CCTP adapter _refund() sending remainder to immutable ROUTER
+        # - incorrect-equality: false positive on balance == 0 refund checks
+        # - uninitialized-local: false positive on inline assembly memory writes in StellarAddress/HyperionRouter
+        # - unused-return: false positive on intentional partial tuple unpacking in parse and relayer adapter bridgeIn
+        run: |
+          set -o pipefail
+          slither . \
+            --checklist \
+            --filter-paths "lib/|test/" \
+            --exclude arbitrary-send-eth,incorrect-equality,uninitialized-local,unused-return \
+            --fail-medium | tee slither-report.md
 
       - name: Put the checklist in the summary
-        # Always, because a failing Slither run is exactly when somebody wants to read the
-        # findings. The action writes its stdout on an exit trap, so the output survives a
-        # non-zero exit.
-        #
-        # The report goes through the environment rather than being interpolated into the script
-        # body. Its text is derived from repository sources, which on a pull request from a fork
-        # means text a stranger controls, and a stranger's text pasted into a shell script is a
-        # shell injection.
         if: always()
-        env:
-          REPORT: ${{ steps.slither.outputs.stdout }}
+        working-directory: evm
         run: |
           set -uo pipefail
           {
             echo "### Slither"
             echo
-            if [ -n "${REPORT:-}" ]; then
-              printf '%s\n' "$REPORT"
+            if [ -s slither-report.md ]; then
+              cat slither-report.md
             else
-              echo "Slither produced no report. It probably failed before analysis, which usually"
-              echo "means the build info it was pointed at was missing or unreadable."
+              echo "Slither produced no report. It probably failed before analysis."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
