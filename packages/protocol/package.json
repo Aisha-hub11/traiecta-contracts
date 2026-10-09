@@ -6,7 +6,7 @@
   "author": "dotmantissa",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/StellarHyperion/stellarhyperion-contracts.git",
+    "url": "git+https://github.com/Traiecta-Labs/traiecta-contracts.git",
     "directory": "packages/protocol"
   },
   "type": "module",
