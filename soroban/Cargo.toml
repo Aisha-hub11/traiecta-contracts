@@ -12,7 +12,7 @@ members = [
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
-repository = "https://github.com/StellarHyperion/stellarhyperion-contracts"
+repository = "https://github.com/Traiecta-Labs/traiecta-contracts"
 rust-version = "1.85"
 
 [workspace.dependencies]
