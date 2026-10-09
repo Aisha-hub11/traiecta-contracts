@@ -25,7 +25,7 @@ differently, and three implementations of the same wire formats that have to agr
 
 The Stellar half of Traiecta is a Soroban router plus one adapter per rail, and it is the leg where finality is immediate:
 
-- **Soroban router contract** (`traiecta-router`) compiled to `wasm32v1-none`, holding the fees, flow limits, claims, timelock, and adapter dispatch.
+- **Soroban router contract** (`hyperion-router`) compiled to `wasm32v1-none`, holding the fees, flow limits, claims, timelock, and adapter dispatch.
 - **Rail adapters as separate contracts** for Circle CCTP V2, Axelar ITS and GMP, and Allbridge Core, each acting only on its own rail's verifier.
 - **SEP-23 cross-chain addresses** carried as Stellar strkeys and CRC16 checked on chain before any funds move.
 - **`bridge_in` is callable only by a rail's own verifier**, so the router never attests a cross-chain message itself.
@@ -60,17 +60,17 @@ The Traiecta-Labs organization divides cross-chain routing across three dedicate
 | `traiecta-api` | Event indexer, rail pollers, keeper upkeep, and REST API | Fastify, Postgres, Redis, BullMQ, viem, stellar-sdk |
 | `traiecta-app` | User interface, live switchyard, and transfer tracker | Next.js 16, React 19, CSS modules, wagmi, Stellar Wallets Kit |
 
-Each repository maintains independent continuous integration, dependency definitions, and issue governance while sharing protocol constants and wire codecs from `@traiecta/protocol`.
+Each repository maintains independent continuous integration, dependency definitions, and issue governance while sharing protocol constants and wire codecs from `@hyperion/protocol`.
 
 ## What is in the box
 
 ```
 soroban/              Rust workspace, five crates, compiled to wasm32v1-none
-  traiecta-core         amounts, addresses, flow windows, strkey, codecs, CCTP parsing
-  traiecta-router       the router: fees, limits, claims, timelock, adapter dispatch
-  traiecta-adapter-cctp      Circle CCTP V2
-  traiecta-adapter-axelar    Axelar ITS and GMP
-  traiecta-adapter-allbridge Allbridge Core, outbound only and honest about it
+  hyperion-core         amounts, addresses, flow windows, strkey, codecs, CCTP parsing
+  hyperion-router       the router: fees, limits, claims, timelock, adapter dispatch
+  hyperion-adapter-cctp      Circle CCTP V2
+  hyperion-adapter-axelar    Axelar ITS and GMP
+  hyperion-adapter-allbridge Allbridge Core, outbound only and honest about it
 
 evm/                  Foundry project, solc 0.8.28, via_ir
   src/TraiectaRouter.sol        the same router, in the shape this chain wants
@@ -219,10 +219,10 @@ Soroban has a hard 64KB ceiling per contract, enforced by the ledger rather than
 
 | Contract | Size | Of the limit |
 |---|---|---|
-| `traiecta_router.wasm` | 51.7 KB | 80% |
-| `traiecta_adapter_cctp.wasm` | 25.2 KB | 39% |
-| `traiecta_adapter_axelar.wasm` | 24.8 KB | 38% |
-| `traiecta_adapter_allbridge.wasm` | 23.7 KB | 37% |
+| `hyperion_router.wasm` | 51.7 KB | 80% |
+| `hyperion_adapter_cctp.wasm` | 25.2 KB | 39% |
+| `hyperion_adapter_axelar.wasm` | 24.8 KB | 38% |
+| `hyperion_adapter_allbridge.wasm` | 23.7 KB | 37% |
 
 The router at eighty percent is worth watching. `script/stellar/build.sh` warns past two thirds and
 fails past the limit, so this stops being a surprise.
