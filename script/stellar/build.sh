@@ -22,8 +22,10 @@ note "building"
 
 note "sizes"
 problems=0
+measured=0
 for wasm in "$WASM_DIR"/hyperion_*.wasm; do
   [ -f "$wasm" ] || continue
+  measured=$((measured + 1))
   size=$(stat -c%s "$wasm")
   name=$(basename "$wasm")
   pct=$((size * 100 / LIMIT))
@@ -37,5 +39,13 @@ for wasm in "$WASM_DIR"/hyperion_*.wasm; do
   fi
 done
 
+# A glob that matches nothing leaves the loop body unentered, so without this the gate would
+# report success having measured no contract at all. A crate rename, a moved target directory or
+# a build that emits nothing must not turn a hard ledger rule green, so measuring nothing is
+# itself a failure that names the directory it read.
+if [ "$measured" -eq 0 ]; then
+  die "measured no wasm in $WASM_DIR (looked for hyperion_*.wasm); refusing to pass a size gate that read nothing"
+fi
+
 [ "$problems" -eq 0 ] || die "$problems contract(s) exceed the 64KB ledger limit"
-printf '\n\033[32mAll contracts fit.\033[0m\n'
+printf '\n\033[32mAll %d contracts fit.\033[0m\n' "$measured"
