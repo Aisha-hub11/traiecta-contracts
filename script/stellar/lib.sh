@@ -9,7 +9,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 CONTRACTS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SOROBAN_DIR="$CONTRACTS_ROOT/soroban"
-WASM_DIR="$SOROBAN_DIR/target/wasm32v1-none/release"
+WASM_DIR="${WASM_DIR:-$SOROBAN_DIR/target/wasm32v1-none/release}"
 RECORD_DIR="$CONTRACTS_ROOT/deployments"
 
 NETWORK="${STELLAR_NETWORK:-testnet}"
